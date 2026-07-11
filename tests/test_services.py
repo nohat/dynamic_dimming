@@ -9,6 +9,7 @@ import voluptuous as vol
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dynamic_dimming.const import (
+    DEFAULT_STEP_PCT,
     DOMAIN,
     SERVICE_MOVE,
     SERVICE_STEP,
@@ -67,3 +68,43 @@ async def test_move_requires_direction(hass):
         await hass.services.async_call(
             DOMAIN, SERVICE_MOVE, {"entity_id": "light.lamp"}, blocking=True
         )
+
+
+async def test_step_service_dispatches_to_controller(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_step"
+    ) as mock_step:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_STEP,
+            {"entity_id": "light.lamp", "direction": "up", "step_pct": 15},
+            blocking=True,
+        )
+    mock_step.assert_awaited_once_with("light.lamp", "up", 15.0)
+
+
+async def test_step_service_uses_default_step_pct(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_step"
+    ) as mock_step:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_STEP,
+            {"entity_id": "light.lamp", "direction": "down"},
+            blocking=True,
+        )
+    mock_step.assert_awaited_once()
+    args = mock_step.await_args.args
+    assert args[2] == DEFAULT_STEP_PCT
+
+
+async def test_unload_entry_deregisters_services_and_drops_controller(hass):
+    entry = await _setup_entry(hass)
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert not hass.services.has_service(DOMAIN, SERVICE_MOVE)
+    assert not hass.services.has_service(DOMAIN, SERVICE_STOP)
+    assert not hass.services.has_service(DOMAIN, SERVICE_STEP)
+    assert entry.entry_id not in hass.data[DOMAIN]

@@ -6,6 +6,7 @@
   "issue_tracker": "https://github.com/nohat/dynamic_dimming/issues",
   "codeowners": ["@nohat"],
   "config_flow": true,
+  "single_config_entry": true,
   "iot_class": "calculated",
   "integration_type": "service",
   "dependencies": [],
