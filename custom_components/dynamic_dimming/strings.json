@@ -1,0 +1,13 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Dynamic Dimming",
+        "description": "Enable the Dynamic Dimming services."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Dynamic Dimming is already configured."
+    }
+  }
+}
