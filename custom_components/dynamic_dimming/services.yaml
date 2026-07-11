@@ -1,0 +1,47 @@
+move:
+  name: Move (start dimming)
+  description: Start continuously changing a light's brightness until stopped.
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: light
+    direction:
+      required: true
+      selector:
+        select:
+          options: [up, down]
+    rate:
+      required: false
+      selector:
+        text:
+stop:
+  name: Stop dimming
+  description: Stop an in-progress dimming movement.
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: light
+step:
+  name: Step
+  description: Apply a single relative brightness change.
+  fields:
+    entity_id:
+      required: true
+      selector:
+        entity:
+          domain: light
+    direction:
+      required: true
+      selector:
+        select:
+          options: [up, down]
+    step_pct:
+      required: false
+      selector:
+        number:
+          min: 1
+          max: 100
