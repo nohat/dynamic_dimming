@@ -12,6 +12,7 @@ from custom_components.dynamic_dimming.backends.simulation import (
 from custom_components.dynamic_dimming.const import (
     DIRECTION_DOWN,
     DIRECTION_UP,
+    RATE_PROFILES,
     TICK_INTERVAL,
 )
 
@@ -37,6 +38,41 @@ def test_resolve_rate_profiles_and_numbers():
     assert resolve_rate("fast") == 160.0
     assert resolve_rate(75) == 75.0
     assert resolve_rate(None) == 90.0  # DEFAULT_RATE == "medium"
+
+
+def test_resolve_rate_clamps_nonpositive():
+    # A non-positive numeric rate must not zero out the per-tick step, or the
+    # interval will write identical light.turn_on calls forever at 20 Hz.
+    assert resolve_rate(0) == 1.0
+    assert resolve_rate(-10) == 1.0
+    # Unknown profile strings fall back to the default profile.
+    assert resolve_rate("fastt") == RATE_PROFILES["medium"]
+
+
+async def test_rate_only_scales_step_not_tick_count(hass):
+    # Anti-flood invariant: the tick cadence (and therefore call count) is
+    # fixed by TICK_INTERVAL regardless of rate; only the per-step brightness
+    # delta should scale with rate. Two entities, mid-brightness so neither
+    # move reaches a rail within the tick budget.
+    set_light_state(hass, "light.slow", brightness=128, color_modes=("brightness",))
+    set_light_state(hass, "light.fast", brightness=128, color_modes=("brightness",))
+    calls = _turn_on_calls(hass)
+    backend = SimulationBackend(hass)
+
+    await backend.async_move("light.slow", DIRECTION_UP, "slow")
+    await backend.async_move("light.fast", DIRECTION_UP, "fast")
+    await _advance(hass, 3)
+
+    slow_calls = [c for c in calls if c["entity_id"] == "light.slow"]
+    fast_calls = [c for c in calls if c["entity_id"] == "light.fast"]
+
+    assert len(slow_calls) == 3
+    assert len(fast_calls) == 3
+    assert len(slow_calls) == len(fast_calls)  # rate-independent tick count
+
+    slow_delta = slow_calls[-1]["brightness"] - slow_calls[0]["brightness"]
+    fast_delta = fast_calls[-1]["brightness"] - fast_calls[0]["brightness"]
+    assert fast_delta > slow_delta  # rate scales the step size, not the count
 
 
 async def test_move_up_steps_toward_full(hass):

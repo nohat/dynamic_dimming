@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from homeassistant.components.light import ColorMode
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, split_entity_id
 
 from .const import DimmingClass
 
@@ -17,7 +17,7 @@ def classify(hass: HomeAssistant, entity_id: str) -> DimmingClass:
     v0.1a: any brightness-capable ``light`` is SIMULATED; everything else is
     UNSUPPORTED. NATIVE is reserved for future backends that claim an entity.
     """
-    if entity_id.split(".", 1)[0] != "light":
+    if split_entity_id(entity_id)[0] != "light":
         return DimmingClass.UNSUPPORTED
 
     state = hass.states.get(entity_id)

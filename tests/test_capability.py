@@ -30,3 +30,8 @@ async def test_non_light_is_unsupported(hass):
 
 async def test_missing_entity_is_unsupported(hass):
     assert classify(hass, "light.ghost") is DimmingClass.UNSUPPORTED
+
+
+async def test_missing_supported_color_modes_attribute_is_unsupported(hass):
+    hass.states.async_set("light.legacy", "on", {})
+    assert classify(hass, "light.legacy") is DimmingClass.UNSUPPORTED

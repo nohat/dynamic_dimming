@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
@@ -15,17 +16,27 @@ from ..const import (
 )
 from .base import DimmingBackend
 
+_LOGGER = logging.getLogger(__name__)
+
 _MAX = 255
 _MIN = 0
 _TICK_SECONDS = TICK_INTERVAL.total_seconds()
 
 
 def resolve_rate(rate: str | float | None) -> float:
-    """Map a profile name or number to brightness units per second."""
+    """Map a profile name or number to brightness units per second.
+
+    Numeric rates are clamped to a positive floor so a non-positive rate
+    (e.g. ``0`` from the free-text service field) can't zero out the
+    per-tick step and flood the mesh with an endless stream of identical
+    ``light.turn_on`` calls at the 20 Hz tick rate.
+    """
     if rate is None:
         return RATE_PROFILES[DEFAULT_RATE]
     if isinstance(rate, (int, float)):
-        return float(rate)
+        return max(1.0, float(rate))
+    if rate not in RATE_PROFILES:
+        _LOGGER.debug("unknown rate profile %r; falling back to %s", rate, DEFAULT_RATE)
     return RATE_PROFILES.get(rate, RATE_PROFILES[DEFAULT_RATE])
 
 

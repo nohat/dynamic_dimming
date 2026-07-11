@@ -33,7 +33,9 @@ class DimmingController:
         if unsub is not None:
             unsub()
 
-    async def async_move(self, entity_id: str, direction: str, rate) -> None:
+    async def async_move(
+        self, entity_id: str, direction: str, rate: str | float | None
+    ) -> None:
         cls = classify(self.hass, entity_id)
         backend = self._backend_for(cls)
         if backend is None:
