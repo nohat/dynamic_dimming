@@ -83,7 +83,8 @@ class SimulationBackend(DimmingBackend):
             if real_unsub is not None:
                 real_unsub()
                 real_unsub = None
-            self._unsubs.pop(entity_id, None)
+            if self._unsubs.get(entity_id) is _unsub:
+                self._unsubs.pop(entity_id, None)
 
         self._unsubs[entity_id] = _unsub
         return _unsub

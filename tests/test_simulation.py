@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import timedelta
-
 from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import async_fire_time_changed
 
@@ -81,6 +79,53 @@ async def test_move_stops_when_entity_unavailable(hass):
     await _advance(hass, 3)
 
     assert len(calls) == count_before  # no further steps after unavailable
+
+
+async def test_unsub_double_cancel_is_safe(hass):
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    calls = _turn_on_calls(hass)
+    backend = SimulationBackend(hass)
+
+    unsub = await backend.async_move("light.lamp", DIRECTION_UP, "medium")
+    await _advance(hass, 2)
+    unsub()
+    unsub()  # second call must not raise
+
+    count_before = len(calls)
+    await _advance(hass, 3)
+    assert len(calls) == count_before  # no further steps after cancellation
+
+
+async def test_async_stop_is_noop(hass):
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    backend = SimulationBackend(hass)
+
+    await backend.async_stop("light.lamp")  # no active job for this entity
+
+    await backend.async_move("light.lamp", DIRECTION_UP, "medium")
+    await backend.async_stop("light.lamp")  # active job present; still a no-op
+
+
+async def test_stale_unsub_does_not_orphan_newer_job(hass):
+    set_light_state(hass, "light.lamp", brightness=8, color_modes=("brightness",))
+    calls = _turn_on_calls(hass)
+    backend = SimulationBackend(hass)
+
+    unsub_a = await backend.async_move("light.lamp", DIRECTION_DOWN, "fast")  # job A
+    unsub_b = await backend.async_move("light.lamp", DIRECTION_DOWN, "fast")  # job B supersedes A
+
+    unsub_a()  # stale unsub from superseded job A
+
+    assert "light.lamp" in backend._unsubs  # job B must still be tracked
+
+    await _advance(hass, 20)  # enough ticks at "fast" to reach the rail (0)
+
+    assert min(c["brightness"] for c in calls) == 0  # job B reached the rail
+    count_at_rail = len(calls)
+    await _advance(hass, 3)
+    assert len(calls) == count_at_rail  # job B self-stopped, no lingering turn_ons
+
+    unsub_b()  # cleanup; must not raise
 
 
 async def test_step_makes_one_relative_change(hass):
