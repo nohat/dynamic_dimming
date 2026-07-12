@@ -8,3 +8,6 @@ venv/
 # Dev HA runtime state — keep only the seed configuration.yaml
 /config/*
 !/config/configuration.yaml
+
+# Personal test roster with real entity IDs — never publish
+TESTING.local.md
