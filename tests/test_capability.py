@@ -42,3 +42,30 @@ async def test_simulation_backend_never_claims(hass):
 
     set_light_state(hass, "light.lamp", brightness=100)
     assert SimulationBackend(hass).claims("light.lamp") is False
+
+
+class _StubBackend:
+    def __init__(self, claim: bool) -> None:
+        self._claim = claim
+
+    def claims(self, entity_id: str) -> bool:
+        return self._claim
+
+
+async def test_native_when_a_backend_claims(hass):
+    set_light_state(hass, "light.lamp", brightness=100)
+    assert classify(hass, "light.lamp", [_StubBackend(True)]) is DimmingClass.NATIVE
+
+
+async def test_simulated_when_no_backend_claims(hass):
+    set_light_state(hass, "light.lamp", brightness=100)
+    assert (
+        classify(hass, "light.lamp", [_StubBackend(False)]) is DimmingClass.SIMULATED
+    )
+
+
+async def test_claiming_backend_cannot_rescue_onoff_light(hass):
+    set_light_state(hass, "light.plug", color_modes=("onoff",))
+    assert (
+        classify(hass, "light.plug", [_StubBackend(True)]) is DimmingClass.UNSUPPORTED
+    )

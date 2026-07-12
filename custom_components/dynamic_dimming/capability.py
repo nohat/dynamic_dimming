@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
+
 from homeassistant.components.light import ColorMode
 from homeassistant.core import HomeAssistant, split_entity_id
 
@@ -11,11 +13,14 @@ from .const import DimmingClass
 _NON_BRIGHTNESS_MODES = {ColorMode.ONOFF, ColorMode.UNKNOWN}
 
 
-def classify(hass: HomeAssistant, entity_id: str) -> DimmingClass:
+def classify(
+    hass: HomeAssistant, entity_id: str, backends: Iterable = ()
+) -> DimmingClass:
     """Return how ``entity_id`` can be driven for continuous dimming.
 
-    v0.1a: any brightness-capable ``light`` is SIMULATED; everything else is
-    UNSUPPORTED. NATIVE is reserved for future backends that claim an entity.
+    ``backends`` is the ordered native-backend list; the brightness gate runs
+    first, so a claiming backend can never rescue a non-dimmable light. With
+    no claimer, any brightness-capable light is SIMULATED.
     """
     if split_entity_id(entity_id)[0] != "light":
         return DimmingClass.UNSUPPORTED
@@ -25,6 +30,8 @@ def classify(hass: HomeAssistant, entity_id: str) -> DimmingClass:
         return DimmingClass.UNSUPPORTED
 
     modes = set(state.attributes.get("supported_color_modes") or [])
-    if modes - _NON_BRIGHTNESS_MODES:
-        return DimmingClass.SIMULATED
-    return DimmingClass.UNSUPPORTED
+    if not (modes - _NON_BRIGHTNESS_MODES):
+        return DimmingClass.UNSUPPORTED
+    if any(backend.claims(entity_id) for backend in backends):
+        return DimmingClass.NATIVE
+    return DimmingClass.SIMULATED
