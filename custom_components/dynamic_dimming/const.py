@@ -29,6 +29,16 @@ ATTR_STEP_PCT = "step_pct"
 DIRECTION_UP = "up"
 DIRECTION_DOWN = "down"
 
+# Backend override values for the `backend` service field.
+ATTR_BACKEND = "backend"
+BACKEND_AUTO = "auto"
+BACKEND_SIMULATED = "simulated"
+BACKEND_NATIVE = "native"
+
+# Zigbee2MQTT
+CONF_Z2M_BASE_TOPIC = "z2m_base_topic"
+DEFAULT_Z2M_BASE_TOPIC = "zigbee2mqtt"
+
 # Simulation tuning
 TICK_INTERVAL = timedelta(milliseconds=50)  # 20 Hz cap
 # Named rate profiles -> brightness units (0-255) per second.

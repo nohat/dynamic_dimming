@@ -35,3 +35,10 @@ async def test_missing_entity_is_unsupported(hass):
 async def test_missing_supported_color_modes_attribute_is_unsupported(hass):
     hass.states.async_set("light.legacy", "on", {})
     assert classify(hass, "light.legacy") is DimmingClass.UNSUPPORTED
+
+
+async def test_simulation_backend_never_claims(hass):
+    from custom_components.dynamic_dimming.backends.simulation import SimulationBackend
+
+    set_light_state(hass, "light.lamp", brightness=100)
+    assert SimulationBackend(hass).claims("light.lamp") is False

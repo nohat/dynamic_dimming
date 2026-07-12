@@ -16,6 +16,22 @@ class DimmingBackend(ABC):
     active job and calls it to supersede or stop.
     """
 
+    def claims(self, entity_id: str) -> bool:
+        """Whether this backend can natively drive ``entity_id``.
+
+        Default ``False``: simulation is the fallback, never a claimer. A
+        native backend that would match but cannot resolve what it needs
+        (MQTT not loaded, topic unknown) must also return ``False`` so the
+        entity degrades to simulation rather than going dead.
+        """
+        return False
+
+    async def async_setup(self) -> None:
+        """One-time initialization (e.g. MQTT subscriptions)."""
+
+    async def async_unload(self) -> None:
+        """Release anything acquired in async_setup."""
+
     @abstractmethod
     async def async_move(
         self, entity_id: str, direction: str, rate: str | float | None
