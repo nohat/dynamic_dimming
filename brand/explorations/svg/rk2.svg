@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="b2" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7"/></filter>
+    <linearGradient id="face" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FBC470"/><stop offset="0.5" stop-color="#F2A94A"/><stop offset="1" stop-color="#DB8C28"/></linearGradient>
+    <linearGradient id="side" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#B06E17"/><stop offset="1" stop-color="#7E4E0D"/></linearGradient>
+    <radialGradient id="gl2" cx="45%" cy="55%" r="62%"><stop offset="0" stop-color="#F3A63C" stop-opacity="0.32"/><stop offset="100%" stop-color="#F3A63C" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="250" cy="266" r="216" fill="url(#gl2)"/>
+  <!-- extruded thickness (right + bottom side faces), offset down-right -->
+  <path d="M 150 92 Q 150 60 182 60 L 356 60 Q 388 60 388 92 L 388 452 Q 388 484 356 484 L 182 484 Q 150 484 150 452 Z"
+        transform="translate(20,16)" fill="url(#side)"/>
+  <!-- front face (rocker paddle), tilted: top edge slightly narrower (recedes), bottom wider (toward viewer) -->
+  <path d="M 168 64 L 348 64 Q 380 64 380 96 L 388 448 Q 388 480 356 480 L 176 480 Q 140 480 144 448 L 150 96 Q 150 64 168 64 Z"
+        fill="url(#face)"/>
+  <!-- seam shadow across the tilted face -->
+  <path d="M 150 262 L 384 262 L 386 296 L 148 296 Z" fill="#7E4E0D" fill-opacity="0.5" filter="url(#b2)"/>
+  <!-- top-edge highlight and lower-rocker top highlight -->
+  <rect x="168" y="74" width="196" height="16" rx="8" fill="#FBC470" fill-opacity="0.6" filter="url(#b2)"/>
+  <rect x="160" y="298" width="210" height="16" rx="8" fill="#FBC470" fill-opacity="0.6" filter="url(#b2)"/>
+  <!-- LED bar inset near right edge of the face -->
+  <rect x="330" y="120" width="44" height="270" rx="22" fill="#7E4E0D" fill-opacity="0.5"/>
+  <rect x="336.0" y="346.3" width="32.0" height="33.7" rx="12.8" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="336.0" y="303.1" width="32.0" height="33.7" rx="12.8" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="336.0" y="259.8" width="32.0" height="33.7" rx="12.8" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="336.0" y="216.5" width="32.0" height="33.7" rx="12.8" fill="#FBC470" fill-opacity="1.0"/>
+    <rect x="336.0" y="173.3" width="32.0" height="33.7" rx="12.8" fill="#7E4E0D" fill-opacity="0.55"/>
+    <rect x="336.0" y="130.0" width="32.0" height="33.7" rx="12.8" fill="#7E4E0D" fill-opacity="0.55"/>
+</svg>

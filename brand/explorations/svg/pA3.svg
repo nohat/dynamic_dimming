@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="g" cx="30%" cy="55%" r="60%">
+      <stop offset="0%" stop-color="#F3A63C" stop-opacity="0.38"/><stop offset="70%" stop-color="#E0912A" stop-opacity="0.07"/><stop offset="100%" stop-color="#E0912A" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="tf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F3A63C" stop-opacity="0.60"/><stop offset="1" stop-color="#B4701A" stop-opacity="0.42"/></linearGradient>
+    <linearGradient id="bf" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B4701A" stop-opacity="0.42"/><stop offset="1" stop-color="#F3A63C" stop-opacity="0.60"/></linearGradient>
+    <clipPath id="pad"><rect x="212" y="70" width="248" height="372" rx="58"/></clipPath>
+  </defs>
+  <circle cx="150" cy="256" r="184" fill="url(#g)"/>
+  <rect x="79.0" y="402.1" width="78.0" height="39.9" rx="32.8" fill="#E0912A" fill-opacity="1.0"/>
+  <rect x="79.0" y="335.7" width="78.0" height="39.9" rx="32.8" fill="#E0912A" fill-opacity="1.0"/>
+  <rect x="79.0" y="269.3" width="78.0" height="39.9" rx="32.8" fill="#E0912A" fill-opacity="1.0"/>
+  <rect x="79.0" y="202.8" width="78.0" height="39.9" rx="32.8" fill="#F3A63C" fill-opacity="1.0"/>
+  <rect x="79.0" y="136.4" width="78.0" height="39.9" rx="32.8" fill="#E0912A" fill-opacity="0.2"/>
+  <rect x="79.0" y="70.0" width="78.0" height="39.9" rx="32.8" fill="#E0912A" fill-opacity="0.2"/>
+<g clip-path="url(#pad)">
+    <polygon points="206,64 466,64 466,205 430,205 336.0,150 242,205 206,205" fill="#F3A63C" fill-opacity="0.52"/>
+    <polygon points="206,205 242,205 336.0,150 430,205 466,205 466,256.0 206,256.0" fill="#B4701A" fill-opacity="0.42"/>
+    <polygon points="206,256.0 466,256.0 466,307 430,307 336.0,362 242,307 206,307" fill="#B4701A" fill-opacity="0.42"/>
+    <polygon points="206,307 242,307 336.0,362 430,307 466,307 466,448 206,448" fill="#F3A63C" fill-opacity="0.52"/>
+    <rect x="212" y="252.0" width="248" height="8" fill="#F3A63C" fill-opacity="0.85"/>
+  </g><path d="M 242 205 L 336.0 150 L 430 205" fill="none" stroke="#E0912A" stroke-opacity="0.42" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><path d="M 242 307 L 336.0 362 L 430 307" fill="none" stroke="#E0912A" stroke-opacity="0.42" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><rect x="212" y="70" width="248" height="372" rx="58" fill="none" stroke="#E0912A" stroke-opacity="0.7" stroke-width="8"/></svg>

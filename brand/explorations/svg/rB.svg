@@ -7,7 +7,9 @@
   <linearGradient id="sideg" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6E430A"/><stop offset="1" stop-color="#A5640F"/></linearGradient>
   <radialGradient id="gl" cx="46%" cy="52%" r="60%"><stop offset="0" stop-color="#F3A63C" stop-opacity="0.32"/><stop offset="100%" stop-color="#F3A63C" stop-opacity="0"/></radialGradient>
   </defs>
-  <circle cx="248" cy="262" r="216" fill="url(#gl)"/>
+  <circle cx="256" cy="262" r="216" fill="url(#gl)"/>
+  <path d="M 150 54 L 120 72 L 150 256.0 L 120 440 L 150 458 Z" fill="url(#sideg)"/>
+  <path d="M 150 54 L 120 72 L 150 256.0 L 120 440 L 150 458" fill="none" stroke="#6E430A" stroke-opacity="0.6" stroke-width="3" stroke-linejoin="round"/>
   <g clip-path="url(#ff)">
     <rect x="150" y="54" width="196" height="202.0" fill="url(#top)"/>
     <rect x="150" y="256.0" width="196" height="202.0" fill="url(#bot)"/>
@@ -16,11 +18,10 @@
     <rect x="150" y="239.0" width="196" height="34" fill="#6E430A" fill-opacity="0.78" filter="url(#soft)"/>
   </g>
   <rect x="150" y="54" width="196" height="404" rx="26" fill="none" stroke="#6E430A" stroke-opacity="0.45" stroke-width="4"/>
-  <!-- LED level column, SEPARATE, to the right -->
-  <rect x="385.0" y="362.5" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
-    <rect x="385.0" y="314.0" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
-    <rect x="385.0" y="265.5" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
-    <rect x="385.0" y="217.0" width="50.0" height="33.5" rx="20.0" fill="#FBCB78" fill-opacity="1.0"/>
-    <rect x="385.0" y="168.5" width="50.0" height="33.5" rx="20.0" fill="#6E430A" fill-opacity="0.6"/>
-    <rect x="385.0" y="120.0" width="50.0" height="33.5" rx="20.0" fill="#6E430A" fill-opacity="0.6"/>
+  <rect x="389.0" y="362.5" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
+    <rect x="389.0" y="314.0" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
+    <rect x="389.0" y="265.5" width="50.0" height="33.5" rx="20.0" fill="#F0A544" fill-opacity="1.0"/>
+    <rect x="389.0" y="217.0" width="50.0" height="33.5" rx="20.0" fill="#FBCB78" fill-opacity="1.0"/>
+    <rect x="389.0" y="168.5" width="50.0" height="33.5" rx="20.0" fill="#6E430A" fill-opacity="0.6"/>
+    <rect x="389.0" y="120.0" width="50.0" height="33.5" rx="20.0" fill="#6E430A" fill-opacity="0.6"/>
 </svg>

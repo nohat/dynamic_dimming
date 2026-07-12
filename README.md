@@ -73,10 +73,14 @@ button-release.
 
 ## Brand
 
-The mark is a dimmer's level ring sweeping around a warm, glowing light, in
+The mark is a US **Decora rocker dimmer** with a vertical LED level bar, in
 incandescent amber (`#E0912A` / `#F3A63C`). Source and exports live in
-[`brand/`](brand/) (`icon.svg` is parametric — level, hue, and sizes are one
-edit away). Original artwork; not derived from Home Assistant branding.
+[`brand/`](brand/); the working directions and their generators are in
+[`brand/explorations/`](brand/explorations/). Original artwork; not derived from
+Home Assistant branding.
+
+The current icon is a **placeholder** — flat SVG shading doesn't read
+convincingly as 3-D. Rendering it from a lit 3-D model is tracked as an issue.
 
 ## Status
 

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <filter id="blur" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="7"/></filter>
+    <radialGradient id="amb" cx="34%" cy="30%" r="85%"><stop offset="0" stop-color="#FBC470"/><stop offset="55%" stop-color="#DB8C28"/><stop offset="100%" stop-color="#B06E17"/></radialGradient>
+    <linearGradient id="up" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FBC470"/><stop offset="0.5" stop-color="#F2A94A"/><stop offset="1" stop-color="#B06E17"/></linearGradient>
+    <linearGradient id="dn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F2A94A"/><stop offset="0.55" stop-color="#DB8C28"/><stop offset="1" stop-color="#B06E17"/></linearGradient>
+    <radialGradient id="gl" cx="50%" cy="55%" r="60%"><stop offset="0" stop-color="#F3A63C" stop-opacity="0.35"/><stop offset="100%" stop-color="#F3A63C" stop-opacity="0"/></radialGradient>
+  </defs>
+  <circle cx="256" cy="270" r="220" fill="url(#gl)"/>
+  <!-- device body / faceplate -->
+  <rect x="60" y="48" width="392" height="416" rx="70" fill="url(#amb)"/>
+  <rect x="60" y="48" width="392" height="416" rx="70" fill="none" stroke="#7E4E0D" stroke-opacity="0.35" stroke-width="3"/>
+  <!-- LED channel (recessed) on the right -->
+  <rect x="356" y="104" width="60" height="304" rx="30" fill="#7E4E0D" fill-opacity="0.55"/>
+  <rect x="366.0" y="359.3" width="40.0" height="36.7" rx="16.0" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="366.0" y="310.7" width="40.0" height="36.7" rx="16.0" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="366.0" y="262.0" width="40.0" height="36.7" rx="16.0" fill="#F2A94A" fill-opacity="1.0"/>
+    <rect x="366.0" y="213.3" width="40.0" height="36.7" rx="16.0" fill="#FBC470" fill-opacity="1.0"/>
+    <rect x="366.0" y="164.7" width="40.0" height="36.7" rx="16.0" fill="#7E4E0D" fill-opacity="0.55"/>
+    <rect x="366.0" y="116.0" width="40.0" height="36.7" rx="16.0" fill="#7E4E0D" fill-opacity="0.55"/>
+  <!-- paddle: two beveled rockers, top-lit, with soft seam shadow -->
+  <!-- seam shadow (soft) -->
+  <rect x="96" y="250" width="228" height="26" rx="13" fill="#7E4E0D" fill-opacity="0.55" filter="url(#blur)"/>
+  <!-- top rocker -->
+  <rect x="96" y="86" width="228" height="158" rx="30" fill="url(#up)"/>
+  <rect x="104" y="92" width="212" height="20" rx="10" fill="#FBC470" fill-opacity="0.55" filter="url(#blur)"/>
+  <!-- bottom rocker -->
+  <rect x="96" y="272" width="228" height="158" rx="30" fill="url(#dn)"/>
+  <rect x="104" y="276" width="212" height="18" rx="9" fill="#FBC470" fill-opacity="0.7" filter="url(#blur)"/>
+  <rect x="104" y="408" width="212" height="18" rx="9" fill="#7E4E0D" fill-opacity="0.5" filter="url(#blur)"/>
+</svg>
