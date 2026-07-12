@@ -1,5 +1,5 @@
-name: 🔆 Device report
-description: Tell us what happened when you tried hold-to-dim on one of your lights.
+name: Device report
+description: Report what happened when you tried dynamic_dimming on one of your lights.
 title: "[device] "
 labels: ["device-report"]
 body:
@@ -8,10 +8,10 @@ body:
       value: |
         <img src="https://raw.githubusercontent.com/nohat/dynamic_dimming/main/brand/icon.png" width="76" align="right" alt="">
 
-        **Device reports are the whole point of v0.1a.** It's a proof-of-concept —
-        the way it gets real is people trying it on hardware I don't have and
-        telling me what happened. Worked, half-worked, flat-out didn't: all of it
-        is useful. Thank you for taking the time.
+        This integration has been tested on very little hardware so far. A report of
+        what happened on yours — whether it worked well, worked poorly, or did not
+        work at all — is the most useful contribution you can make right now.
+        Thank you for taking the time.
   - type: dropdown
     id: integration
     attributes:
@@ -31,17 +31,18 @@ body:
     id: device
     attributes:
       label: Light make & model
-      placeholder: "e.g. IKEA TRÅDFRI LED1732G11, or Inovelli LZW31-SN"
+      description: The exact model number, if you can find it — it is usually on the device label.
+      placeholder: "e.g. Martin Jerry MJ-SD01, IKEA TRÅDFRI LED1732G11"
     validations:
       required: true
   - type: dropdown
     id: result
     attributes:
-      label: How did it go?
+      label: Result
       options:
-        - "Worked well — smooth hold-to-dim"
-        - "Worked, but janky (steppy / laggy / floods the network)"
-        - "Didn't work"
+        - "Worked well — smooth continuous dimming"
+        - "Worked, with problems (visible stepping, lag, or network flooding)"
+        - "Did not work"
     validations:
       required: true
   - type: checkboxes
@@ -50,8 +51,8 @@ body:
       label: What you tried
       options:
         - label: move up
-        - label: move down (did it stay on at the low end, not turn off?)
-        - label: stop (held the level when you released?)
+        - label: move down (did it stop at the lowest on-level rather than turning off?)
+        - label: stop (did the light hold its level?)
         - label: step
   - type: input
     id: ha_version
@@ -61,7 +62,7 @@ body:
   - type: textarea
     id: details
     attributes:
-      label: What you saw
-      description: Anything notable — smoothness, lag, whether stop held the level, mesh behaviour, relevant logs.
+      label: What you observed
+      description: "Anything notable: smoothness, latency between release and stop, whether the level held, mesh or network behavior, relevant log lines."
     validations:
       required: false
