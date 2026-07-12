@@ -81,7 +81,7 @@ On platforms whose protocol already has move/stop commands, the integration send
 | Platform | How it is driven | Notes |
 |---|---|---|
 | Zigbee2MQTT | `brightness_move` / `brightness_step` published to the device's `/set` topic | Rate profiles map directly to Z2M's units-per-second. Plain `brightness_move` is used (never `brightness_move_onoff`), so dimming down stops at the lowest on-level. The base topic is configurable in the integration's options if yours is not `zigbee2mqtt`. |
-| Tasmota | `Dimmer >` / `Dimmer <` / `Dimmer !` on the device's command topic | Ramp speed and step size are the device's own `Speed`, `Fade`, and `DimmerStep` settings; the `rate` and `step_pct` fields are ignored on this path, and `Fade 1` must be enabled on the device for a visible ramp. |
+| Tasmota | `Dimmer >` / `Dimmer <` / `Dimmer !` on the device's command topic for move/stop, `Dimmer +` / `Dimmer -` for step | Ramp speed and step size are the device's own `Speed`, `Fade`, and `DimmerStep` settings; the `rate` and `step_pct` fields are ignored on this path, and `Fade 1` must be enabled on the device for a visible ramp. |
 | Everything else | Stepped simulation (unchanged from v0.1a) | |
 
 Selection is automatic. The `move` and `step` services also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light.

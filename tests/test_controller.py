@@ -123,3 +123,26 @@ async def test_native_step_routes_to_claimer(hass, mqtt_mock):
     mqtt_mock.async_publish.assert_called_once_with(
         f"zigbee2mqtt/{IEEE}/set", '{"brightness_step": -13}', 0, False
     )
+
+
+async def test_unload_cancels_active_jobs(hass):
+    set_light_state(hass, "light.lamp", brightness=100)
+    controller = _controller(hass)
+    await controller.async_move("light.lamp", DIRECTION_UP, "medium")
+    assert "light.lamp" in controller._jobs
+    await controller.async_unload()
+    assert controller._jobs == {}
+
+
+async def test_simulated_override_then_native_move_cancels_sim_job(hass, mqtt_mock):
+    """A sim move superseded by a plain native move must cancel the tick loop."""
+    entity_id = _z2m_light(hass)
+    controller = _controller(hass)
+    await controller.async_move(entity_id, DIRECTION_UP, "medium", BACKEND_SIMULATED)
+    assert entity_id in controller._jobs
+    mqtt_mock.async_publish.reset_mock()
+    await controller.async_move(entity_id, DIRECTION_UP, "medium")
+    assert entity_id not in controller._jobs
+    mqtt_mock.async_publish.assert_called_once_with(
+        f"zigbee2mqtt/{IEEE}/set", '{"brightness_move": 90}', 0, False
+    )

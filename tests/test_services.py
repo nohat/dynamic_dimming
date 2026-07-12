@@ -130,6 +130,24 @@ async def test_step_service_uses_default_step_pct(hass):
     assert args[2] == DEFAULT_STEP_PCT
 
 
+async def test_step_passes_backend_override(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_step"
+    ) as mock_step:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_STEP,
+            {
+                "entity_id": "light.lamp",
+                "direction": "up",
+                ATTR_BACKEND: BACKEND_SIMULATED,
+            },
+            blocking=True,
+        )
+    assert mock_step.await_args.args[3] == BACKEND_SIMULATED
+
+
 async def test_unload_entry_deregisters_services_and_drops_controller(hass):
     entry = await _setup_entry(hass)
     assert await hass.config_entries.async_unload(entry.entry_id)

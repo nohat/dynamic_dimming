@@ -41,6 +41,10 @@ class DimmingController:
             await backend.async_setup()
 
     async def async_unload(self) -> None:
+        # Drain active simulation jobs first: an unload mid-move must not
+        # leave a 20 Hz interval firing after the config entry is gone.
+        for entity_id in list(self._jobs):
+            self._cancel_job(entity_id)
         for backend in self.native_backends:
             await backend.async_unload()
 
@@ -87,6 +91,10 @@ class DimmingController:
         if target is None:
             _LOGGER.debug("move ignored: %s is unsupported", entity_id)
             return
+        # Superseding a native ramp here does not publish a native stop: the
+        # next absolute or native command replaces the device's own ramp per
+        # Zigbee Level-cluster/Tasmota semantics, so the overlap when
+        # superseding to simulation is at most one tick.
         self._cancel_job(entity_id)
         unsub = await target.async_move(entity_id, direction, rate)
         if unsub is not None:
