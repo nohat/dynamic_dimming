@@ -44,7 +44,8 @@ _STEP_SCHEMA = vol.Schema(
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Dynamic Dimming from a config entry."""
-    controller = DimmingController(hass)
+    controller = DimmingController(hass, entry)
+    await controller.async_setup()
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = controller
 
     async def _move(call: ServiceCall) -> None:
@@ -74,5 +75,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     for service in (SERVICE_MOVE, SERVICE_STOP, SERVICE_STEP):
         hass.services.async_remove(DOMAIN, service)
-    hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    controller = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
+    if controller is not None:
+        await controller.async_unload()
     return True

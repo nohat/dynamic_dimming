@@ -9,5 +9,10 @@
     "abort": {
       "single_instance_allowed": "Dynamic Dimming is already configured."
     }
+  },
+  "exceptions": {
+    "no_native_backend": {
+      "message": "No native backend claims {entity_id}; it can only be dimmed by simulation."
+    }
   }
 }
