@@ -50,6 +50,9 @@ data:
   rate: medium         # optional: slow | medium | fast, or a number (brightness units/sec)
 ```
 
+Dimming down bottoms out at the lowest on-level and stays lit (Zigbee "Move"
+semantics) — it won't turn the light off. Use `light.turn_off` for that.
+
 **`dynamic_dimming.stop`** — stop an in-progress move, holding the current level:
 
 ```yaml

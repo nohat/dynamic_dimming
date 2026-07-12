@@ -10,6 +10,7 @@ from custom_components.dynamic_dimming.backends.simulation import (
     resolve_rate,
 )
 from custom_components.dynamic_dimming.const import (
+    DEFAULT_MIN_BRIGHTNESS,
     DIRECTION_DOWN,
     DIRECTION_UP,
     RATE_PROFILES,
@@ -92,7 +93,9 @@ async def test_move_up_steps_toward_full(hass):
     assert max(brightnesses) < 130
 
 
-async def test_move_down_stops_at_zero(hass):
+async def test_move_down_floors_at_min_on(hass):
+    # `move` down bottoms out at the minimum on-level (Zigbee "Move" semantics),
+    # never commanding 0 / turning the light off.
     set_light_state(hass, "light.lamp", brightness=8, color_modes=("brightness",))
     calls = _turn_on_calls(hass)
     backend = SimulationBackend(hass)
@@ -100,7 +103,9 @@ async def test_move_down_stops_at_zero(hass):
     await backend.async_move("light.lamp", DIRECTION_DOWN, "fast")
     await _advance(hass, 20)
 
-    assert min(c["brightness"] for c in calls) == 0
+    brightnesses = [c["brightness"] for c in calls]
+    assert min(brightnesses) == DEFAULT_MIN_BRIGHTNESS
+    assert 0 not in brightnesses  # light is never driven off
 
 
 async def test_move_stops_when_entity_unavailable(hass):
@@ -154,9 +159,9 @@ async def test_stale_unsub_does_not_orphan_newer_job(hass):
 
     assert "light.lamp" in backend._unsubs  # job B must still be tracked
 
-    await _advance(hass, 20)  # enough ticks at "fast" to reach the rail (0)
+    await _advance(hass, 20)  # enough ticks at "fast" to reach the rail (min-on)
 
-    assert min(c["brightness"] for c in calls) == 0  # job B reached the rail
+    assert min(c["brightness"] for c in calls) == DEFAULT_MIN_BRIGHTNESS  # job B reached the rail
     count_at_rail = len(calls)
     await _advance(hass, 3)
     assert len(calls) == count_at_rail  # job B self-stopped, no lingering turn_ons

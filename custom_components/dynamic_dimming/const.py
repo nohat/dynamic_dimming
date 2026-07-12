@@ -35,3 +35,7 @@ TICK_INTERVAL = timedelta(milliseconds=50)  # 20 Hz cap
 RATE_PROFILES: dict[str, float] = {"slow": 40.0, "medium": 90.0, "fast": 160.0}
 DEFAULT_RATE = "medium"
 DEFAULT_STEP_PCT = 5.0
+# Dimming down floors here — a still-on minimum, never 0/off. This is the Zigbee
+# Level Control "Move" (vs "Move with On/Off") semantics: hold-to-dim-down bottoms
+# out at the lowest on-level and stays lit. Use light.turn_off to actually turn off.
+DEFAULT_MIN_BRIGHTNESS = 1
