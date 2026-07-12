@@ -50,6 +50,19 @@ After P10: file a device report via the repo's report form with the results.
 | S7 | Watch Zigbee2MQTT logs during a `fast` move on a Zigbee light | Command rate on the mesh, any timeouts or retries — this is the mesh-flooding measurement the simulation-vs-native argument rests on |
 | S8 | Full protocol on a cloud-connected light with extra attention to latency | Likely the worst case: record command latency and any rate-limiting; an honest "did not work" here is a finding, not a failure |
 
+## Native-path addendum (v0.1b)
+
+The Zigbee2MQTT and Tasmota entries in the fleet now classify as native: `move` sends one protocol command and the device ramps itself. On each of those entries:
+
+| # | Step | Expected |
+|---|---|---|
+| N1 | Re-run P2–P4 and P8 with `backend:` omitted | One MQTT command per action in the broker logs, not a 20 Hz stream; the ramp is the device's own; dimming down still floors at the lowest on-level and never turns off |
+| N2 | Re-run P2 with `backend: simulated` | The v0.1a tick-loop behavior returns — this is the comparison baseline |
+| N3 | `move` with `backend: native` on a light no backend claims | Fails with an error naming the entity; nothing moves |
+| N4 | Tasmota only: observe ramp speed across rate profiles | Identical — speed comes from the device's own `Speed`/`Fade` settings; the `rate` field is documented as ignored on this path |
+
+S7 (the mesh-rate measurement) is now the native-vs-simulated comparison it was designed to be: run N1 and N2 back-to-back on the Zigbee2MQTT entry and compare command counts in the Zigbee2MQTT logs.
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
