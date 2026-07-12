@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#F3A63C" stop-opacity="0.45"/>
+      <stop offset="65%" stop-color="#E0912A" stop-opacity="0.10"/>
+      <stop offset="100%" stop-color="#E0912A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="bulb" cx="42%" cy="36%" r="72%">
+      <stop offset="0%" stop-color="#F3A63C"/>
+      <stop offset="100%" stop-color="#E0912A"/>
+    </radialGradient>
+  </defs>
+  <circle cx="256" cy="256" r="150" fill="url(#glow)"/>
+  <!-- full ring track -->
+  <circle cx="256" cy="256" r="228" fill="none" stroke="#E0912A" stroke-opacity="0.26" stroke-width="54"/>
+  <!-- active level arc from top, clockwise -->
+  <path d="M 256.00 28.00 A 228 228 0 1 1 99.92 422.20"
+        fill="none" stroke="#E0912A" stroke-width="54" stroke-linecap="round"/>
+  <!-- handle knob -->
+  <circle cx="99.92" cy="422.20" r="32.4" fill="#F3A63C"/>
+  <circle cx="99.92" cy="422.20" r="15.1" fill="#FFFFFF" fill-opacity="0.92"/>
+  <!-- central light -->
+  <circle cx="256" cy="256" r="72" fill="url(#bulb)"/>
+  <circle cx="234" cy="232" r="22" fill="#FFFFFF" fill-opacity="0.30"/>
+</svg>

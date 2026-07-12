@@ -1,7 +1,20 @@
-# Dynamic Dimming
+<p align="center">
+  <img src="https://raw.githubusercontent.com/nohat/dynamic_dimming/main/brand/icon.png" width="128" alt="Dynamic Dimming">
+</p>
 
-A Home Assistant custom integration that adds **hold-to-dim** control — start
-dimming, stop when you let go — to lights that don't expose it natively.
+<h1 align="center">Dynamic Dimming</h1>
+
+<p align="center">
+  <strong>Hold-to-dim for Home Assistant lights that don't support it natively.</strong>
+</p>
+
+<p align="center">
+  <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-e0912a.svg?style=flat-square" alt="HACS Custom"></a>
+  <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-e0912a.svg?style=flat-square" alt="Home Assistant 2026.2+">
+  <img src="https://img.shields.io/badge/version-v0.1a-e0912a.svg?style=flat-square" alt="v0.1a">
+</p>
+
+---
 
 Home Assistant's `light.turn_on` only sets a target brightness; there's no
 "start dimming / stop dimming" the way a wall dimmer works. Dynamic Dimming adds
@@ -57,6 +70,13 @@ data:
 
 A typical hold-to-dim binding calls `move` on button-hold and `stop` on
 button-release.
+
+## Brand
+
+The mark is a dimmer's level ring sweeping around a warm, glowing light, in
+incandescent amber (`#E0912A` / `#F3A63C`). Source and exports live in
+[`brand/`](brand/) (`icon.svg` is parametric — level, hue, and sizes are one
+edit away). Original artwork; not derived from Home Assistant branding.
 
 ## Status
 
