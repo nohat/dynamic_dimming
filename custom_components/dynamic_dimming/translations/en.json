@@ -10,6 +10,19 @@
       "single_instance_allowed": "Dynamic Dimming is already configured."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Dynamic Dimming options",
+        "data": {
+          "z2m_base_topic": "Zigbee2MQTT base topic"
+        },
+        "data_description": {
+          "z2m_base_topic": "The base MQTT topic your Zigbee2MQTT instance publishes under."
+        }
+      }
+    }
+  },
   "exceptions": {
     "no_native_backend": {
       "message": "No native backend claims {entity_id}; it can only be dimmed by simulation."
