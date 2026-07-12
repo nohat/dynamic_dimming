@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: 📘 Install & usage
+    url: https://github.com/nohat/dynamic_dimming#readme
+    about: How to install via HACS, add the integration, and call move / stop / step.

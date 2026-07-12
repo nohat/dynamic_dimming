@@ -1,0 +1,67 @@
+name: 🔆 Device report
+description: Tell us what happened when you tried hold-to-dim on one of your lights.
+title: "[device] "
+labels: ["device-report"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        <img src="https://raw.githubusercontent.com/nohat/dynamic_dimming/main/brand/icon.png" width="76" align="right" alt="">
+
+        **Device reports are the whole point of v0.1a.** It's a proof-of-concept —
+        the way it gets real is people trying it on hardware I don't have and
+        telling me what happened. Worked, half-worked, flat-out didn't: all of it
+        is useful. Thank you for taking the time.
+  - type: dropdown
+    id: integration
+    attributes:
+      label: How is the light connected?
+      options:
+        - ZHA
+        - Zigbee2MQTT
+        - Z-Wave JS
+        - ESPHome
+        - Tasmota
+        - Matter
+        - Wi-Fi / cloud (Hue, LIFX, Tuya, …)
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Light make & model
+      placeholder: "e.g. IKEA TRÅDFRI LED1732G11, or Inovelli LZW31-SN"
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: How did it go?
+      options:
+        - "Worked well — smooth hold-to-dim"
+        - "Worked, but janky (steppy / laggy / floods the network)"
+        - "Didn't work"
+    validations:
+      required: true
+  - type: checkboxes
+    id: tried
+    attributes:
+      label: What you tried
+      options:
+        - label: move up
+        - label: move down (did it stay on at the low end, not turn off?)
+        - label: stop (held the level when you released?)
+        - label: step
+  - type: input
+    id: ha_version
+    attributes:
+      label: Home Assistant version
+      placeholder: "e.g. 2026.7.2"
+  - type: textarea
+    id: details
+    attributes:
+      label: What you saw
+      description: Anything notable — smoothness, lag, whether stop held the level, mesh behaviour, relevant logs.
+    validations:
+      required: false
