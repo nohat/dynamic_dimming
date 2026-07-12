@@ -80,7 +80,8 @@ incandescent amber (`#E0912A` / `#F3A63C`). Source and exports live in
 Home Assistant branding.
 
 The current icon is a **placeholder** — flat SVG shading doesn't read
-convincingly as 3-D. Rendering it from a lit 3-D model is tracked as an issue.
+convincingly as 3-D. Rendering it from a lit 3-D model is tracked in
+[#1](https://github.com/nohat/dynamic_dimming/issues/1).
 
 ## Status
 
