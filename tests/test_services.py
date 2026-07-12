@@ -9,6 +9,9 @@ import voluptuous as vol
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.dynamic_dimming.const import (
+    ATTR_BACKEND,
+    BACKEND_AUTO,
+    BACKEND_SIMULATED,
     DEFAULT_STEP_PCT,
     DOMAIN,
     SERVICE_MOVE,
@@ -45,9 +48,8 @@ async def test_move_service_dispatches_to_controller(hass):
             {"entity_id": "light.lamp", "direction": "up", "rate": "fast"},
             blocking=True,
         )
-    mock_move.assert_awaited_once()
     args = mock_move.await_args.args
-    assert args[0] == "light.lamp" and args[1] == "up" and args[2] == "fast"
+    assert args == ("light.lamp", "up", "fast", BACKEND_AUTO)
 
 
 async def test_stop_service_dispatches_to_controller(hass):
@@ -70,6 +72,34 @@ async def test_move_requires_direction(hass):
         )
 
 
+async def test_move_passes_backend_override(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_move"
+    ) as mock_move:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_MOVE,
+            {
+                "entity_id": "light.lamp",
+                "direction": "up",
+                ATTR_BACKEND: BACKEND_SIMULATED,
+            },
+            blocking=True,
+        )
+    assert mock_move.await_args.args[3] == BACKEND_SIMULATED
+
+
+async def test_move_rejects_unknown_backend(hass):
+    await _setup_entry(hass)
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_MOVE,
+            {"entity_id": "light.lamp", "direction": "up", ATTR_BACKEND: "warp"},
+            blocking=True,
+        )
+
+
 async def test_step_service_dispatches_to_controller(hass):
     await _setup_entry(hass)
     set_light_state(hass, "light.lamp", brightness=100, color_modes=("brightness",))
@@ -81,7 +111,7 @@ async def test_step_service_dispatches_to_controller(hass):
             {"entity_id": "light.lamp", "direction": "up", "step_pct": 15},
             blocking=True,
         )
-    mock_step.assert_awaited_once_with("light.lamp", "up", 15.0)
+    mock_step.assert_awaited_once_with("light.lamp", "up", 15.0, BACKEND_AUTO)
 
 
 async def test_step_service_uses_default_step_pct(hass):
