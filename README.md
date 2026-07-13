@@ -11,21 +11,24 @@
 <p align="center">
   <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-e0912a.svg?style=flat-square" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-e0912a.svg?style=flat-square" alt="Home Assistant 2026.2+">
-  <img src="https://img.shields.io/badge/version-v0.1a-e0912a.svg?style=flat-square" alt="v0.1a">
+  <img src="https://img.shields.io/badge/version-v0.1.1-e0912a.svg?style=flat-square" alt="v0.1.1">
 </p>
 
 ---
 
 Home Assistant's `light.turn_on` only sets a target brightness; there's no
 "start dimming / stop dimming" the way a wall dimmer works. Dynamic Dimming adds
-its own `move` / `stop` / `step` services and, for **v0.1a**, implements them by
-*simulation*: it steps `light.turn_on` at a fixed rate on a timer until you stop
-it or it reaches the end. That works with any dimmable light entity today. Native
-protocol backends (Zigbee2MQTT move/stop, etc.) are planned for later versions.
+its own `move` / `stop` / `step` services. On platforms whose protocol already
+has move/stop commands — **Zigbee2MQTT and Tasmota** today — it sends those
+natively so the device dims itself. On every other dimmable light it falls back
+to *simulation*: stepping `light.turn_on` at a fixed rate on a timer until you
+stop it or it reaches the end. Either way it works with any dimmable light entity.
 
-> **v0.1a scope:** simulation only. Higher rates take bigger steps (not more
-> commands), so a hold doesn't flood your mesh. Linear ramp; perceptual curves
-> and native backends come later.
+> **v0.1.1 scope:** native Zigbee2MQTT and Tasmota backends, with stepped
+> simulation as the fallback everywhere else. On the simulated path, higher rates
+> take bigger steps (not more commands), so a hold doesn't flood your mesh. Linear
+> ramp; perceptual curves and further native backends (ZHA, Z-Wave JS, Hue) come
+> later.
 
 ## Installation
 
