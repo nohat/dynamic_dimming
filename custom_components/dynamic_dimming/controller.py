@@ -11,6 +11,7 @@ from homeassistant.exceptions import ServiceValidationError
 from .backends.base import DimmingBackend
 from .backends.simulation import SimulationBackend
 from .backends.tasmota import TasmotaBackend
+from .backends.wiz import WizBackend
 from .backends.z2m import Z2MBackend
 from .capability import classify
 from .const import (
@@ -33,6 +34,7 @@ class DimmingController:
         self.native_backends: list[DimmingBackend] = [
             Z2MBackend(hass, entry),
             TasmotaBackend(hass),
+            WizBackend(hass),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
 

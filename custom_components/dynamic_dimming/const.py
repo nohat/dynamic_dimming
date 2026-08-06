@@ -39,6 +39,13 @@ BACKEND_NATIVE = "native"
 CONF_Z2M_BASE_TOPIC = "z2m_base_topic"
 DEFAULT_Z2M_BASE_TOPIC = "zigbee2mqtt"
 
+# WiZ
+WIZ_DOMAIN = "wiz"
+WIZ_PORT = 38899
+# WiZ clamps setPilot `dimming` into this range; 0 does not switch a bulb off.
+WIZ_MIN_DIMMING = 1
+WIZ_MAX_DIMMING = 100
+
 # Simulation tuning
 TICK_INTERVAL = timedelta(milliseconds=50)  # 20 Hz cap
 # Named rate profiles -> brightness units (0-255) per second.

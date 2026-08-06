@@ -20,12 +20,15 @@ Home Assistant's `light.turn_on` only sets a target brightness; there's no
 "start dimming / stop dimming" the way a wall dimmer works. Dynamic Dimming adds
 its own `move` / `stop` / `step` services. On platforms whose protocol already
 has move/stop commands — **Zigbee2MQTT and Tasmota** today — it sends those
-natively so the device dims itself. On every other dimmable light it falls back
-to *simulation*: stepping `light.turn_on` at a fixed rate on a timer until you
-stop it or it reaches the end. Either way it works with any dimmable light entity.
+natively so the device dims itself. **WiZ** has no such command, so it gets a
+native *transport* instead: the ramp is still stepped, but over direct
+fire-and-forget UDP rather than through `light.turn_on`. On every other dimmable
+light it falls back to *simulation*: stepping `light.turn_on` at a fixed rate on a
+timer until you stop it or it reaches the end. Either way it works with any
+dimmable light entity.
 
-> **v0.1.1 scope:** native Zigbee2MQTT and Tasmota backends, with stepped
-> simulation as the fallback everywhere else. On the simulated path, higher rates
+> **v0.2.0 scope:** native Zigbee2MQTT, Tasmota and WiZ backends, with stepped
+> simulation as the fallback everywhere else. On the stepped paths, higher rates
 > take bigger steps (not more commands), so a hold doesn't flood your mesh. Linear
 > ramp; perceptual curves and further native backends (ZHA, Z-Wave JS, Hue) come
 > later.
@@ -85,7 +88,10 @@ On platforms whose protocol already has move/stop commands, the integration send
 |---|---|---|
 | Zigbee2MQTT | `brightness_move` / `brightness_step` published to the device's `/set` topic | Rate profiles map directly to Z2M's units-per-second. Plain `brightness_move` is used (never `brightness_move_onoff`), so dimming down stops at the lowest on-level. The base topic is configurable in the integration's options if yours is not `zigbee2mqtt`. |
 | Tasmota | `Dimmer >` / `Dimmer <` / `Dimmer !` on the device's command topic for move/stop, `Dimmer +` / `Dimmer -` for step | Ramp speed and step size are the device's own `Speed`, `Fade`, and `DimmerStep` settings; the `rate` and `step_pct` fields are ignored on this path, and `Fade 1` must be enabled on the device for a visible ramp. |
+| WiZ | A stream of absolute `setPilot` datagrams straight to the bulb's IP on UDP 38899, sent fire-and-forget at the tick rate | WiZ firmware has no ramp command and the HA integration doesn't advertise `TRANSITION`, so the ramp still has to be stepped — but not through `light.turn_on`. An acknowledged `setPilot` round-trip measures 38–476 ms (median ~160 ms), which a 20 Hz ramp cannot wait on; the same datagram sent unacknowledged costs ~0.3 ms. Every tick carries an absolute level, so a dropped datagram self-corrects on the next one. A light **group** whose members are all WiZ bulbs is claimed too, and driven from a single tick so the bulbs stay visibly in step. |
 | Everything else | Stepped simulation (unchanged from v0.1a) | |
+
+Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine goes stale while a bulb is moving; `stop` and `step` re-assert the final level through the light entity to put the two back in agreement.
 
 Selection is automatic. The `move` and `step` services also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light.
 

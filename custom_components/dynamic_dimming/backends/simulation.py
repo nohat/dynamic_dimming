@@ -43,7 +43,7 @@ def resolve_rate(rate: str | float | None) -> float:
     return RATE_PROFILES.get(rate, RATE_PROFILES[DEFAULT_RATE])
 
 
-def _current_brightness(hass: HomeAssistant, entity_id: str) -> int | None:
+def current_brightness(hass: HomeAssistant, entity_id: str) -> int | None:
     """Return current brightness, or None if the entity is unusable."""
     state = hass.states.get(entity_id)
     if state is None or state.state in ("unavailable", "unknown"):
@@ -97,12 +97,12 @@ class SimulationBackend(DimmingBackend):
         sign = 1 if direction == DIRECTION_UP else -1
         # Accumulate a float target so fractional per-tick steps don't lose
         # precision to rounding on each write.
-        start = _current_brightness(self.hass, entity_id)
+        start = current_brightness(self.hass, entity_id)
         target = float(start if start is not None else _MIN)
 
         async def _tick(_now: datetime) -> None:
             nonlocal target
-            if _current_brightness(self.hass, entity_id) is None:  # unavailable
+            if current_brightness(self.hass, entity_id) is None:  # unavailable
                 self._stop_job(entity_id)
                 return
             target = max(_MIN_ON, min(_MAX, target + sign * step))
@@ -142,7 +142,7 @@ class SimulationBackend(DimmingBackend):
         return None
 
     async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
-        current = _current_brightness(self.hass, entity_id)
+        current = current_brightness(self.hass, entity_id)
         if current is None:
             return
         delta = (step_pct / 100.0) * _MAX
