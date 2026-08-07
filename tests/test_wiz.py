@@ -190,6 +190,37 @@ async def test_move_up_streams_absolute_udp_not_service_calls(hass):
     assert calls == []
 
 
+async def test_move_up_is_perceptual_not_linear(hass):
+    # The reported symptom was a hold that spent most of its travel at the top
+    # of the range. On the perceptual curve the commanded dimming should
+    # accelerate: small increments low down, large ones near full.
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=0, on=False)
+    backend, sock = await _backend(hass)
+
+    await backend.async_move(entity_id, DIRECTION_UP, "fast")
+    await _advance(hass, 20)
+
+    dims = sock.dimmings
+    assert dims == sorted(dims)
+    deltas = [b - a for a, b in zip(dims, dims[1:])]
+    assert deltas[-1] > deltas[0]  # accelerating, not constant
+    # A linear ramp at "fast" (160 u/s) would already be past 60% dimming after
+    # 20 ticks; the perceptual one is still well down the range.
+    assert dims[19] < 40
+
+
+async def test_linear_curve_override_restores_constant_steps(hass):
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=0, on=False)
+    backend, sock = await _backend(hass)
+
+    await backend.async_move(entity_id, DIRECTION_UP, "fast", curve="linear")
+    await _advance(hass, 20)
+
+    deltas = [b - a for a, b in zip(sock.dimmings, sock.dimmings[1:])]
+    # Constant to within the 1-unit quantisation of WiZ's 100-step scale.
+    assert max(deltas) - min(deltas) <= 1
+
+
 async def test_move_carries_state_so_a_dark_bulb_lights(hass):
     entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=0, on=False)
     backend, sock = await _backend(hass)
@@ -310,7 +341,8 @@ async def test_step_sends_udp_then_reconciles(hass):
 
     assert len(sock.sent) == 1  # immediate, unacknowledged
     assert len(calls) == 1  # then reconciled
-    assert 120 <= calls[0]["brightness"] <= 132  # +10% of 255 ~= +26
+    # 10% of perceptual travel, not of 0-255.
+    assert 140 <= calls[0]["brightness"] <= 152
 
 
 async def test_step_on_unclaimed_entity_does_nothing(hass):

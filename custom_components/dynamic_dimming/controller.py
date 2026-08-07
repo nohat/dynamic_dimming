@@ -29,12 +29,12 @@ class DimmingController:
 
     def __init__(self, hass: HomeAssistant, entry: ConfigEntry) -> None:
         self.hass = hass
-        self._simulation = SimulationBackend(hass)
+        self._simulation = SimulationBackend(hass, entry)
         # Ordered: the first backend to claim an entity drives it natively.
         self.native_backends: list[DimmingBackend] = [
             Z2MBackend(hass, entry),
             TasmotaBackend(hass),
-            WizBackend(hass),
+            WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
 
@@ -88,6 +88,7 @@ class DimmingController:
         direction: str,
         rate: str | float | None,
         backend: str = "auto",
+        curve: str | float | None = None,
     ) -> None:
         target = self._backend_for(entity_id, backend)
         if target is None:
@@ -98,7 +99,7 @@ class DimmingController:
         # Zigbee Level-cluster/Tasmota semantics, so the overlap when
         # superseding to simulation is at most one tick.
         self._cancel_job(entity_id)
-        unsub = await target.async_move(entity_id, direction, rate)
+        unsub = await target.async_move(entity_id, direction, rate, curve)
         if unsub is not None:
             self._jobs[entity_id] = unsub
 
@@ -117,9 +118,10 @@ class DimmingController:
         direction: str,
         step_pct: float,
         backend: str = "auto",
+        curve: str | float | None = None,
     ) -> None:
         target = self._backend_for(entity_id, backend)
         if target is None:
             _LOGGER.debug("step ignored: %s is unsupported", entity_id)
             return
-        await target.async_step(entity_id, direction, step_pct)
+        await target.async_step(entity_id, direction, step_pct, curve)

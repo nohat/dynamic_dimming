@@ -61,8 +61,14 @@ class Z2MBackend(DimmingBackend):
         )
 
     async def async_move(
-        self, entity_id: str, direction: str, rate: str | float | None
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        curve: str | float | None = None,
     ) -> CALLBACK_TYPE | None:
+        # `curve` intentionally unused: the Level cluster Move command ramps on
+        # the device, with whatever curve its firmware applies.
         ieee = self._ieee(entity_id)
         if ieee is None:
             return None
@@ -78,7 +84,13 @@ class Z2MBackend(DimmingBackend):
             return
         await self._publish(ieee, {"brightness_move": "stop"})
 
-    async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
+    async def async_step(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        curve: str | float | None = None,
+    ) -> None:
         ieee = self._ieee(entity_id)
         if ieee is None:
             return

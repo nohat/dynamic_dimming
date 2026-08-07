@@ -91,9 +91,14 @@ class TasmotaBackend(DimmingBackend):
         return self._cmnd_topic(entity_id) is not None
 
     async def async_move(
-        self, entity_id: str, direction: str, rate: str | float | None
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        curve: str | float | None = None,
     ) -> CALLBACK_TYPE | None:
-        # `rate` intentionally unused: ramp speed is the device's Speed/Fade.
+        # `rate` and `curve` intentionally unused: the ramp and its shape are
+        # the device's own Speed/Fade settings.
         topic = self._cmnd_topic(entity_id)
         if topic is None:
             return None
@@ -108,8 +113,15 @@ class TasmotaBackend(DimmingBackend):
             return
         await mqtt.async_publish(self.hass, topic, _STOP)
 
-    async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
-        # `step_pct` intentionally unused: step size is the device's DimmerStep.
+    async def async_step(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        curve: str | float | None = None,
+    ) -> None:
+        # `step_pct` and `curve` intentionally unused: step size is the device's
+        # DimmerStep.
         topic = self._cmnd_topic(entity_id)
         if topic is None:
             return

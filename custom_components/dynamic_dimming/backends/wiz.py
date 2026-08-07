@@ -25,13 +25,13 @@ import logging
 import socket
 from datetime import datetime
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.event import async_track_time_interval
 
 from ..const import (
-    DEFAULT_MIN_BRIGHTNESS,
     DIRECTION_UP,
     TICK_INTERVAL,
     WIZ_DOMAIN,
@@ -39,6 +39,7 @@ from ..const import (
     WIZ_MIN_DIMMING,
     WIZ_PORT,
 )
+from ..curve import Ramp, curve_shape, from_position, to_position
 from .base import DimmingBackend
 from .simulation import current_brightness, resolve_rate
 
@@ -72,8 +73,9 @@ class WizBackend(DimmingBackend):
     drive it through ``light.turn_on``.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry | None = None) -> None:
         self.hass = hass
+        self._entry = entry
         self._sock: socket.socket | None = None
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
         # Last brightness this backend commanded, per entity — the value
@@ -187,7 +189,11 @@ class WizBackend(DimmingBackend):
     # -- backend interface --------------------------------------------------------
 
     async def async_move(
-        self, entity_id: str, direction: str, rate: str | float | None
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        curve: str | float | None = None,
     ) -> CALLBACK_TYPE | None:
         hosts = self._hosts(entity_id)
         if not hosts:
@@ -196,24 +202,27 @@ class WizBackend(DimmingBackend):
         if start is None:  # unavailable
             return None
 
-        step = resolve_rate(rate) * _TICK_SECONDS
-        sign = 1 if direction == DIRECTION_UP else -1
-        # Accumulate as a float so fractional per-tick steps don't lose precision
-        # to rounding on every write.
-        target = float(start)
+        gamma, min_brightness = curve_shape(self._entry, curve)
+        ramp = Ramp(
+            start_brightness=float(start),
+            direction_sign=1 if direction == DIRECTION_UP else -1,
+            units_per_second=resolve_rate(rate),
+            tick_seconds=_TICK_SECONDS,
+            gamma=gamma,
+            min_brightness=min_brightness,
+        )
 
         async def _tick(_now: datetime) -> None:
-            nonlocal target
             if current_brightness(self.hass, entity_id) is None:
                 self._stop_job(entity_id)
                 return
-            target = max(DEFAULT_MIN_BRIGHTNESS, min(_MAX_BRIGHTNESS, target + sign * step))
+            target = ramp.advance()
             self._last[entity_id] = target
             # `state` rides along so dimming up off a dark bulb lights it; dimming
-            # down floors at DEFAULT_MIN_BRIGHTNESS and stays lit, matching the
+            # down floors at the configured minimum and stays lit, matching the
             # Zigbee Move (not Move-with-On/Off) semantics the other backends use.
             self._send(hosts, {"state": True, "dimming": to_dimming(target)})
-            if target in (DEFAULT_MIN_BRIGHTNESS, _MAX_BRIGHTNESS):
+            if ramp.at_rail:
                 self._stop_job(entity_id)
                 await self._resync(entity_id)
 
@@ -240,16 +249,26 @@ class WizBackend(DimmingBackend):
         self._stop_job(entity_id)
         await self._resync(entity_id)
 
-    async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
+    async def async_step(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        curve: str | float | None = None,
+    ) -> None:
         hosts = self._hosts(entity_id)
         if not hosts:
             return
         current = current_brightness(self.hass, entity_id)
         if current is None:
             return
-        delta = (step_pct / 100.0) * _MAX_BRIGHTNESS
+        gamma, min_brightness = curve_shape(self._entry, curve)
+        # A step is a percentage of *perceived* travel, so one tap moves the same
+        # apparent amount at the bottom of the range as at the top.
         sign = 1 if direction == DIRECTION_UP else -1
-        target = max(DEFAULT_MIN_BRIGHTNESS, min(_MAX_BRIGHTNESS, current + sign * delta))
+        position = to_position(current, gamma, min_brightness)
+        position += sign * (step_pct / 100.0)
+        target = from_position(position, gamma, min_brightness)
         # UDP first so the change is visible immediately, then through the light
         # entity so HA's state matches what the bulb is actually doing.
         self._send(hosts, {"state": True, "dimming": to_dimming(target)})

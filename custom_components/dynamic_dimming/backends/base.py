@@ -34,14 +34,30 @@ class DimmingBackend(ABC):
 
     @abstractmethod
     async def async_move(
-        self, entity_id: str, direction: str, rate: str | float | None
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        curve: str | float | None = None,
     ) -> CALLBACK_TYPE | None:
-        """Begin moving ``entity_id`` in ``direction`` at ``rate``."""
+        """Begin moving ``entity_id`` in ``direction`` at ``rate``.
+
+        ``curve`` shapes how the travel is distributed across the range and is
+        meaningful only to backends that step the ramp themselves. A backend that
+        hands the move off to device firmware ignores it: the device's own curve
+        applies, and this integration does not mutate device config.
+        """
 
     @abstractmethod
     async def async_stop(self, entity_id: str) -> None:
         """Stop any native movement (no-op for simulation)."""
 
     @abstractmethod
-    async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
+    async def async_step(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        curve: str | float | None = None,
+    ) -> None:
         """Apply a single relative brightness change."""

@@ -11,6 +11,7 @@ from homeassistant.helpers import config_validation as cv
 
 from .const import (
     ATTR_BACKEND,
+    ATTR_CURVE,
     ATTR_DIRECTION,
     ATTR_RATE,
     ATTR_STEP_PCT,
@@ -37,6 +38,7 @@ _MOVE_SCHEMA = vol.Schema(
         vol.Required(ATTR_DIRECTION): _DIRECTION,
         vol.Optional(ATTR_RATE): vol.Any(vol.Coerce(float), cv.string),
         vol.Optional(ATTR_BACKEND, default=BACKEND_AUTO): _BACKEND,
+        vol.Optional(ATTR_CURVE): vol.Any(vol.Coerce(float), cv.string),
     }
 )
 _STOP_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
@@ -46,6 +48,7 @@ _STEP_SCHEMA = vol.Schema(
         vol.Required(ATTR_DIRECTION): _DIRECTION,
         vol.Optional(ATTR_STEP_PCT, default=DEFAULT_STEP_PCT): vol.Coerce(float),
         vol.Optional(ATTR_BACKEND, default=BACKEND_AUTO): _BACKEND,
+        vol.Optional(ATTR_CURVE): vol.Any(vol.Coerce(float), cv.string),
     }
 )
 
@@ -62,6 +65,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             call.data[ATTR_DIRECTION],
             call.data.get(ATTR_RATE),
             call.data[ATTR_BACKEND],
+            call.data.get(ATTR_CURVE),
         )
 
     async def _stop(call: ServiceCall) -> None:
@@ -73,6 +77,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             call.data[ATTR_DIRECTION],
             call.data[ATTR_STEP_PCT],
             call.data[ATTR_BACKEND],
+            call.data.get(ATTR_CURVE),
         )
 
     hass.services.async_register(DOMAIN, SERVICE_MOVE, _move, schema=_MOVE_SCHEMA)

@@ -25,6 +25,7 @@ SERVICE_STEP = "step"
 ATTR_DIRECTION = "direction"
 ATTR_RATE = "rate"
 ATTR_STEP_PCT = "step_pct"
+ATTR_CURVE = "curve"
 
 DIRECTION_UP = "up"
 DIRECTION_DOWN = "down"
@@ -38,6 +39,10 @@ BACKEND_NATIVE = "native"
 # Zigbee2MQTT
 CONF_Z2M_BASE_TOPIC = "z2m_base_topic"
 DEFAULT_Z2M_BASE_TOPIC = "zigbee2mqtt"
+
+# Dimming curve (see curve.py)
+CONF_CURVE = "curve"
+CONF_MIN_BRIGHTNESS = "min_brightness"
 
 # WiZ
 WIZ_DOMAIN = "wiz"

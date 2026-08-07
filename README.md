@@ -27,11 +27,50 @@ light it falls back to *simulation*: stepping `light.turn_on` at a fixed rate on
 timer until you stop it or it reaches the end. Either way it works with any
 dimmable light entity.
 
-> **v0.2.0 scope:** native Zigbee2MQTT, Tasmota and WiZ backends, with stepped
-> simulation as the fallback everywhere else. On the stepped paths, higher rates
-> take bigger steps (not more commands), so a hold doesn't flood your mesh. Linear
-> ramp; perceptual curves and further native backends (ZHA, Z-Wave JS, Hue) come
-> later.
+> **v0.3.0 scope:** native Zigbee2MQTT, Tasmota and WiZ backends, with stepped
+> simulation as the fallback everywhere else. Stepped ramps travel on a
+> perceptual curve by default. Higher rates take bigger steps (not more
+> commands), so a hold doesn't flood your mesh. Further native backends (ZHA,
+> Z-Wave JS, Hue) come later.
+
+## Dimming curve
+
+A ramp that adds a fixed number of brightness units per tick does not *look*
+steady. Perceived lightness goes roughly as the cube root of luminance, so a
+linear ramp races through the bottom of the range — where a few units are a big
+visible change — and then crawls through the top, where they are barely
+distinguishable. Held from off to full it reads as "flash, then not much for two
+seconds".
+
+Stepped ramps therefore advance at a constant rate through *perceived* lightness,
+and let the brightness step vary: tiny near the bottom, large near the top. A hold
+takes exactly as long end to end as it used to; the time is just spent where it
+is visible. `step` moves by a percentage of perceptual travel too, so one tap is
+the same apparent change at either end of the range.
+
+| Setting | Effect |
+|---|---|
+| `perceptual` (default) | Constant apparent rate. Gamma 3.0, which tracks CIE L\* closely. |
+| `linear` | The pre-0.3.0 behaviour: constant brightness rate. |
+| a number, 1.0–6.0 | Raw gamma, if you want to tune it by eye. |
+
+Set the default in the integration's options, or override per call with the
+`curve` field on `move` and `step`. Backends that hand the ramp to device firmware
+(Zigbee2MQTT, Tasmota) ignore it — the device's own curve applies, and this
+integration does not mutate device config.
+
+### Minimum brightness
+
+The curve travels between a configurable **minimum brightness** and full, rather
+than between zero and full. On a device with coarse resolution this matters more
+than the curve does: WiZ bulbs accept only 100 discrete levels and report a
+minimum usable level of 10 (`minDimLevel` in `getModelConfig`), so a curve
+anchored at zero would spend roughly its first third of travel below the point
+where the bulb does anything.
+
+If the bottom of a hold looks dead, raise **minimum brightness** to the device's
+real floor — 26 on the 0–255 scale is WiZ's declared 10%. The default is 1, which
+preserves the full nominal range.
 
 ## Installation
 

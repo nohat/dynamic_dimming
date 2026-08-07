@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
 
@@ -15,6 +16,7 @@ from ..const import (
     RATE_PROFILES,
     TICK_INTERVAL,
 )
+from ..curve import Ramp, curve_shape, from_position, to_position
 from .base import DimmingBackend
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,33 +87,45 @@ class SimulationBackend(DimmingBackend):
       wrapper is safe if both controller and rail-stop invoke it.
     """
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(self, hass: HomeAssistant, entry: ConfigEntry | None = None) -> None:
         self.hass = hass
+        self._entry = entry
         # entity_id -> idempotent unsub for its active interval.
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
 
+    def _shape(self, curve: str | float | None) -> tuple[float, float]:
+        """The gamma and floor this move should travel between."""
+        return curve_shape(self._entry, curve)
+
     async def async_move(
-        self, entity_id: str, direction: str, rate: str | float | None
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        curve: str | float | None = None,
     ) -> CALLBACK_TYPE | None:
-        step = resolve_rate(rate) * _TICK_SECONDS
-        sign = 1 if direction == DIRECTION_UP else -1
-        # Accumulate a float target so fractional per-tick steps don't lose
-        # precision to rounding on each write.
+        gamma, min_brightness = self._shape(curve)
         start = current_brightness(self.hass, entity_id)
-        target = float(start if start is not None else _MIN)
+        ramp = Ramp(
+            start_brightness=float(start if start is not None else _MIN),
+            direction_sign=1 if direction == DIRECTION_UP else -1,
+            units_per_second=resolve_rate(rate),
+            tick_seconds=_TICK_SECONDS,
+            gamma=gamma,
+            min_brightness=min_brightness,
+        )
 
         async def _tick(_now: datetime) -> None:
-            nonlocal target
             if current_brightness(self.hass, entity_id) is None:  # unavailable
                 self._stop_job(entity_id)
                 return
-            target = max(_MIN_ON, min(_MAX, target + sign * step))
+            target = ramp.advance()
             await self.hass.services.async_call(
                 "light", "turn_on",
                 {"entity_id": entity_id, "brightness": int(round(target))},
                 blocking=False,
             )
-            if target in (_MIN_ON, _MAX):  # reached a rail (min-on / full)
+            if ramp.at_rail:  # bottomed out (min-on) or topped out (full)
                 self._stop_job(entity_id)
 
         # Supersede any existing interval for this entity, then register the new
@@ -141,13 +155,23 @@ class SimulationBackend(DimmingBackend):
         # idempotent unsub). Nothing device-side to send for simulation.
         return None
 
-    async def async_step(self, entity_id: str, direction: str, step_pct: float) -> None:
+    async def async_step(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        curve: str | float | None = None,
+    ) -> None:
         current = current_brightness(self.hass, entity_id)
         if current is None:
             return
-        delta = (step_pct / 100.0) * _MAX
+        gamma, min_brightness = self._shape(curve)
+        # A step is a percentage of *perceived* travel, so one tap moves the
+        # same apparent amount at the bottom of the range as at the top.
         sign = 1 if direction == DIRECTION_UP else -1
-        target = max(_MIN_ON, min(_MAX, current + sign * delta))
+        position = to_position(current, gamma, min_brightness)
+        position += sign * (step_pct / 100.0)
+        target = from_position(position, gamma, min_brightness)
         await self.hass.services.async_call(
             "light", "turn_on",
             {"entity_id": entity_id, "brightness": int(round(target))},

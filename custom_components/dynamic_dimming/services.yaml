@@ -22,6 +22,15 @@ move:
       selector:
         select:
           options: [auto, native, simulated]
+    curve:
+      required: false
+      description: >-
+        How the travel is spread across the range. "perceptual" (default) moves
+        at a steady apparent rate; "linear" moves at a steady brightness rate,
+        which looks fast at the bottom and slow at the top. A number is a raw
+        gamma between 1 and 6. Ignored where the device does its own ramp.
+      selector:
+        text:
 stop:
   name: Stop dimming
   description: Stop an in-progress dimming movement.
@@ -57,3 +66,12 @@ step:
       selector:
         select:
           options: [auto, native, simulated]
+    curve:
+      required: false
+      description: >-
+        How the travel is spread across the range. "perceptual" (default) moves
+        at a steady apparent rate; "linear" moves at a steady brightness rate,
+        which looks fast at the bottom and slow at the top. A number is a raw
+        gamma between 1 and 6. Ignored where the device does its own ramp.
+      selector:
+        text:

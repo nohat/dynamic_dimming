@@ -178,5 +178,7 @@ async def test_step_makes_one_relative_change(hass):
     await hass.async_block_till_done()
 
     assert len(calls) == 1
-    # +10% of 255 ~= +26 -> ~126
-    assert 120 <= calls[0]["brightness"] <= 132
+    # 10% of *perceptual* travel, not 10% of 0-255. From 100 that is a larger
+    # jump in raw units than a linear step, because a tenth of the curve is
+    # worth more brightness this high in the range.
+    assert 140 <= calls[0]["brightness"] <= 152

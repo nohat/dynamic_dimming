@@ -49,7 +49,7 @@ async def test_move_service_dispatches_to_controller(hass):
             blocking=True,
         )
     args = mock_move.await_args.args
-    assert args == ("light.lamp", "up", "fast", BACKEND_AUTO)
+    assert args == ("light.lamp", "up", "fast", BACKEND_AUTO, None)
 
 
 async def test_stop_service_dispatches_to_controller(hass):
@@ -111,7 +111,7 @@ async def test_step_service_dispatches_to_controller(hass):
             {"entity_id": "light.lamp", "direction": "up", "step_pct": 15},
             blocking=True,
         )
-    mock_step.assert_awaited_once_with("light.lamp", "up", 15.0, BACKEND_AUTO)
+    mock_step.assert_awaited_once_with("light.lamp", "up", 15.0, BACKEND_AUTO, None)
 
 
 async def test_step_service_uses_default_step_pct(hass):
