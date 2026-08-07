@@ -102,14 +102,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.services.async_register(DOMAIN, SERVICE_MOVE, _move, schema=_MOVE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_STOP, _stop, schema=_STOP_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_FADE,
-    SERVICE_STEP, _step, schema=_STEP_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_STEP, _step, schema=_STEP_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_FADE, _fade, schema=_FADE_SCHEMA)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    for service in (SERVICE_MOVE, SERVICE_STOP, SERVICE_STEP):
+    for service in (SERVICE_MOVE, SERVICE_STOP, SERVICE_STEP, SERVICE_FADE):
         hass.services.async_remove(DOMAIN, service)
     controller = hass.data.get(DOMAIN, {}).pop(entry.entry_id, None)
     if controller is not None:
