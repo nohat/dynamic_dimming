@@ -23,6 +23,7 @@ from .const import (
     DIRECTION_UP,
     DOMAIN,
     SERVICE_MOVE,
+    SERVICE_FADE,
     SERVICE_STEP,
     SERVICE_STOP,
 )
@@ -42,6 +43,16 @@ _MOVE_SCHEMA = vol.Schema(
     }
 )
 _STOP_SCHEMA = vol.Schema({vol.Required(ATTR_ENTITY_ID): cv.entity_id})
+_FADE_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_ENTITY_ID): cv.entity_id,
+        vol.Required("brightness_pct"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
+        vol.Required("duration"): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=120)),
+        vol.Optional("backend", default="auto"): vol.In(["auto", "native", "simulated"]),
+        vol.Optional("curve"): cv.string,
+    }
+)
+
 _STEP_SCHEMA = vol.Schema(
     {
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
@@ -80,9 +91,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             call.data.get(ATTR_CURVE),
         )
 
+    async def _fade(call: ServiceCall) -> None:
+        await _controller(hass).async_fade(
+            call.data[ATTR_ENTITY_ID],
+            int(call.data["brightness_pct"] * 255 / 100),
+            float(call.data["duration"]),
+            call.data.get("backend", "auto"),
+            call.data.get("curve"),
+        )
+
     hass.services.async_register(DOMAIN, SERVICE_MOVE, _move, schema=_MOVE_SCHEMA)
     hass.services.async_register(DOMAIN, SERVICE_STOP, _stop, schema=_STOP_SCHEMA)
-    hass.services.async_register(DOMAIN, SERVICE_STEP, _step, schema=_STEP_SCHEMA)
+    hass.services.async_register(DOMAIN, SERVICE_FADE,
+    SERVICE_STEP, _step, schema=_STEP_SCHEMA)
     return True
 
 

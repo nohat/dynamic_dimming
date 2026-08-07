@@ -39,7 +39,7 @@ from ..const import (
     WIZ_MIN_DIMMING,
     WIZ_PORT,
 )
-from ..curve import Ramp, curve_shape, from_position, to_position
+from ..curve import Fade, Ramp, curve_shape, from_position, to_position
 from .base import DimmingBackend
 from .simulation import current_brightness, resolve_rate
 
@@ -187,6 +187,62 @@ class WizBackend(DimmingBackend):
         )
 
     # -- backend interface --------------------------------------------------------
+
+    @property
+    def supports_fade(self) -> bool:
+        return True
+
+    async def async_fade(
+        self,
+        entity_id: str,
+        target_brightness: int,
+        duration: float,
+        curve: str | float | None = None,
+    ) -> CALLBACK_TYPE | None:
+        """Fade over UDP. This is the whole reason the service exists.
+
+        Home Assistant cannot fade a WiZ bulb at all -- the entities advertise
+        no TRANSITION -- so every scene fade on this house's 24 WiZ lamps snaps
+        without this path. Streaming absolute setPilot datagrams gets the fade
+        the spec asked for without waiting on an acknowledged round trip, which
+        at a measured 38-476 ms could not sustain a tick.
+        """
+        hosts = self._hosts(entity_id)
+        if not hosts:
+            return None
+        start = current_brightness(self.hass, entity_id)
+        gamma, min_brightness = curve_shape(self._entry, curve)
+        fade = Fade(
+            start_brightness=float(start if start is not None else min_brightness),
+            target_brightness=float(target_brightness),
+            duration=duration,
+            tick_seconds=_TICK_SECONDS,
+            gamma=gamma,
+            min_brightness=min_brightness,
+        )
+
+        async def _tick(_now: datetime) -> None:
+            target = fade.advance()
+            self._last[entity_id] = target
+            self._send(hosts, {"state": True, "dimming": to_dimming(target)})
+            if fade.done:
+                self._stop_job(entity_id)
+                # HA's state machine went stale while the writes bypassed it.
+                await self._resync(entity_id)
+
+        self._stop_job(entity_id)
+        real_unsub = async_track_time_interval(self.hass, _tick, TICK_INTERVAL)
+
+        def _unsub() -> None:
+            nonlocal real_unsub
+            if real_unsub is not None:
+                real_unsub()
+                real_unsub = None
+            if self._unsubs.get(entity_id) is _unsub:
+                self._unsubs.pop(entity_id, None)
+
+        self._unsubs[entity_id] = _unsub
+        return _unsub
 
     async def async_move(
         self,

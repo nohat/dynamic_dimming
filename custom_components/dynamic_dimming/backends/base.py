@@ -26,6 +26,27 @@ class DimmingBackend(ABC):
         """
         return False
 
+    @property
+    def supports_fade(self) -> bool:
+        """Whether this backend can fade to an absolute target itself.
+
+        Default ``False``. A backend that hands ramps to device firmware has no
+        way to say "reach exactly this level in exactly this long", so the
+        controller runs the fade through simulation instead — which writes
+        absolute values and therefore always lands on the target.
+        """
+        return False
+
+    async def async_fade(
+        self,
+        entity_id: str,
+        target_brightness: int,
+        duration: float,
+        curve: str | float | None = None,
+    ) -> CALLBACK_TYPE | None:
+        """Fade to an absolute brightness over ``duration`` seconds."""
+        raise NotImplementedError
+
     async def async_setup(self) -> None:
         """One-time initialization (e.g. MQTT subscriptions)."""
 

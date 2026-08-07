@@ -16,7 +16,7 @@ from ..const import (
     RATE_PROFILES,
     TICK_INTERVAL,
 )
-from ..curve import Ramp, curve_shape, from_position, to_position
+from ..curve import Fade, Ramp, curve_shape, from_position, to_position
 from .base import DimmingBackend
 
 _LOGGER = logging.getLogger(__name__)
@@ -96,6 +96,59 @@ class SimulationBackend(DimmingBackend):
     def _shape(self, curve: str | float | None) -> tuple[float, float]:
         """The gamma and floor this move should travel between."""
         return curve_shape(self._entry, curve)
+
+    @property
+    def supports_fade(self) -> bool:
+        return True
+
+    async def async_fade(
+        self,
+        entity_id: str,
+        target_brightness: int,
+        duration: float,
+        curve: str | float | None = None,
+    ) -> CALLBACK_TYPE | None:
+        """Fade by writing absolute brightness through the light entity.
+
+        This is the fallback path for every backend that cannot fade itself,
+        and it is a good one: because each tick carries an absolute value, the
+        fade always lands exactly on the target however many ticks were dropped
+        on the way.
+        """
+        gamma, min_brightness = self._shape(curve)
+        start = current_brightness(self.hass, entity_id)
+        fade = Fade(
+            start_brightness=float(start if start is not None else min_brightness),
+            target_brightness=float(target_brightness),
+            duration=duration,
+            tick_seconds=_TICK_SECONDS,
+            gamma=gamma,
+            min_brightness=min_brightness,
+        )
+
+        async def _tick(_now: datetime) -> None:
+            target = fade.advance()
+            await self.hass.services.async_call(
+                "light", "turn_on",
+                {"entity_id": entity_id, "brightness": int(round(target))},
+                blocking=False,
+            )
+            if fade.done:
+                self._cancel(entity_id)
+
+        self._cancel(entity_id)
+        real_unsub = async_track_time_interval(self.hass, _tick, TICK_INTERVAL)
+
+        def _unsub() -> None:
+            nonlocal real_unsub
+            if real_unsub is not None:
+                real_unsub()
+                real_unsub = None
+            if self._unsubs.get(entity_id) is _unsub:
+                self._unsubs.pop(entity_id, None)
+
+        self._unsubs[entity_id] = _unsub
+        return _unsub
 
     async def async_move(
         self,

@@ -20,6 +20,7 @@ class DimmingClass(Enum):
 SERVICE_MOVE = "move"
 SERVICE_STOP = "stop"
 SERVICE_STEP = "step"
+SERVICE_FADE = "fade"
 
 # Service data keys
 ATTR_DIRECTION = "direction"

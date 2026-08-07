@@ -160,3 +160,45 @@ class Ramp:
     def at_rail(self) -> bool:
         """Whether the travel has bottomed out or topped out."""
         return self.position <= 0.0 or self.position >= 1.0
+
+
+class Fade:
+    """One fade's travel: start to target, in a fixed duration.
+
+    Interpolates in *position*, not brightness, for the same reason ``Ramp``
+    advances position: a fade that moved linearly in brightness would race
+    through the bottom of the range and crawl through the top, which is exactly
+    the complaint the perceptual curve exists to answer. A fade and a
+    hold-to-dim over the same distance therefore look like the same motion.
+
+    Unlike ``Ramp`` this has an end. ``done`` is true once the last tick has
+    been handed out, so the caller can stop the interval and reconcile.
+    """
+
+    def __init__(
+        self,
+        *,
+        start_brightness: float,
+        target_brightness: float,
+        duration: float,
+        tick_seconds: float,
+        gamma: float,
+        min_brightness: float,
+    ) -> None:
+        self._gamma = gamma
+        self._min_brightness = min_brightness
+        self._start = to_position(start_brightness, gamma, min_brightness)
+        self._end = to_position(target_brightness, gamma, min_brightness)
+        self._ticks = max(1, int(round(duration / tick_seconds)))
+        self._tick = 0
+        self.position = self._start
+
+    def advance(self) -> float:
+        self._tick += 1
+        fraction = min(1.0, self._tick / self._ticks)
+        self.position = self._start + (self._end - self._start) * fraction
+        return from_position(self.position, self._gamma, self._min_brightness)
+
+    @property
+    def done(self) -> bool:
+        return self._tick >= self._ticks
