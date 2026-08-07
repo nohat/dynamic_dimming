@@ -92,7 +92,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
 
     async def _fade(call: ServiceCall) -> None:
-        await _controller(hass).async_fade(
+        await controller.async_fade(
             call.data[ATTR_ENTITY_ID],
             int(call.data["brightness_pct"] * 255 / 100),
             float(call.data["duration"]),
