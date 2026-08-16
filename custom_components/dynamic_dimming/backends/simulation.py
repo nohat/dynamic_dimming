@@ -134,9 +134,9 @@ class SimulationBackend(DimmingBackend):
                 blocking=False,
             )
             if fade.done:
-                self._cancel(entity_id)
+                self._stop_job(entity_id)
 
-        self._cancel(entity_id)
+        self._stop_job(entity_id)
         real_unsub = async_track_time_interval(self.hass, _tick, TICK_INTERVAL)
 
         def _unsub() -> None:
