@@ -110,6 +110,7 @@ class DimmingController:
         duration: float,
         backend: str = "auto",
         curve: str | float | None = None,
+        color_temp_kelvin: int | None = None,
     ) -> None:
         """Fade ``entity_id`` to an absolute level over ``duration`` seconds.
 
@@ -125,7 +126,9 @@ class DimmingController:
         if not target.supports_fade:
             target = self._simulation
         self._cancel_job(entity_id)
-        unsub = await target.async_fade(entity_id, target_brightness, duration, curve)
+        unsub = await target.async_fade(
+            entity_id, target_brightness, duration, curve, color_temp_kelvin
+        )
         if unsub is not None:
             self._jobs[entity_id] = unsub
 

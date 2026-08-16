@@ -182,3 +182,19 @@ async def test_step_makes_one_relative_change(hass):
     # jump in raw units than a linear step, because a tenth of the curve is
     # worth more brightness this high in the range.
     assert 140 <= calls[0]["brightness"] <= 152
+
+
+async def test_fade_color_temp_first_write_only(hass):
+    # Acknowledged transport: once asserted the color sticks, so repeating it
+    # 20 times a second would just tax the device. First write only.
+    set_light_state(hass, "light.lamp", brightness=50, color_modes=("color_temp",))
+    calls = _turn_on_calls(hass)
+    backend = SimulationBackend(hass)
+
+    await backend.async_fade("light.lamp", 255, 0.5, color_temp_kelvin=2700)
+    await _advance(hass, 10)
+
+    assert len(calls) >= 2
+    assert calls[0]["color_temp_kelvin"] == 2700
+    assert all("color_temp_kelvin" not in c for c in calls[1:])
+    assert calls[-1]["brightness"] == 255

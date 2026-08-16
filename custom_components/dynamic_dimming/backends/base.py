@@ -43,8 +43,17 @@ class DimmingBackend(ABC):
         target_brightness: int,
         duration: float,
         curve: str | float | None = None,
+        color_temp_kelvin: int | None = None,
     ) -> CALLBACK_TYPE | None:
-        """Fade to an absolute brightness over ``duration`` seconds."""
+        """Fade to an absolute brightness over ``duration`` seconds.
+
+        ``color_temp_kelvin``, when given, is asserted alongside the ramp from
+        the very first write. It exists because a fade otherwise lights a bulb
+        at whatever color it last had, and a parallel acknowledged
+        ``light.turn_on`` carrying the color arrives whole round-trips later —
+        long enough to read as a flash of stale white. The color itself does
+        not fade; only brightness does.
+        """
         raise NotImplementedError
 
     async def async_setup(self) -> None:

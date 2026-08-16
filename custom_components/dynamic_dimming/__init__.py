@@ -48,6 +48,9 @@ _FADE_SCHEMA = vol.Schema(
         vol.Required(ATTR_ENTITY_ID): cv.entity_id,
         vol.Required("brightness_pct"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
         vol.Required("duration"): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=120)),
+        vol.Optional("color_temp_kelvin"): vol.All(
+            vol.Coerce(int), vol.Range(min=1000, max=10000)
+        ),
         vol.Optional("backend", default="auto"): vol.In(["auto", "native", "simulated"]),
         vol.Optional("curve"): cv.string,
     }
@@ -98,6 +101,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             float(call.data["duration"]),
             call.data.get("backend", "auto"),
             call.data.get("curve"),
+            call.data.get("color_temp_kelvin"),
         )
 
     hass.services.async_register(DOMAIN, SERVICE_MOVE, _move, schema=_MOVE_SCHEMA)

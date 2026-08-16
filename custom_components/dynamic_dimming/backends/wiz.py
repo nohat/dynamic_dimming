@@ -81,6 +81,9 @@ class WizBackend(DimmingBackend):
         # Last brightness this backend commanded, per entity — the value
         # re-asserted through the light entity when the movement stops.
         self._last: dict[str, float] = {}
+        # Color temperature riding along with an active fade, per entity —
+        # re-asserted with the brightness so HA's state machine learns it.
+        self._last_temp: dict[str, int] = {}
 
     def _ensure_sock(self) -> socket.socket | None:
         """Open the send socket on first use.
@@ -177,12 +180,16 @@ class WizBackend(DimmingBackend):
         of writes it never saw.
         """
         brightness = self._last.pop(entity_id, None)
+        temp = self._last_temp.pop(entity_id, None)
         if brightness is None:
             return
+        data: dict = {"entity_id": entity_id, "brightness": int(round(brightness))}
+        if temp is not None:
+            data["color_temp_kelvin"] = temp
         await self.hass.services.async_call(
             "light",
             "turn_on",
-            {"entity_id": entity_id, "brightness": int(round(brightness))},
+            data,
             blocking=False,
         )
 
@@ -198,6 +205,7 @@ class WizBackend(DimmingBackend):
         target_brightness: int,
         duration: float,
         curve: str | float | None = None,
+        color_temp_kelvin: int | None = None,
     ) -> CALLBACK_TYPE | None:
         """Fade over UDP. This is the whole reason the service exists.
 
@@ -206,6 +214,16 @@ class WizBackend(DimmingBackend):
         without this path. Streaming absolute setPilot datagrams gets the fade
         the spec asked for without waiting on an acknowledged round trip, which
         at a measured 38-476 ms could not sustain a tick.
+
+        ``color_temp_kelvin`` rides along in **every** datagram, for the same
+        reason each tick carries an absolute brightness: a lost packet is
+        corrected 50 ms later. Sending ``temp`` is by itself what selects
+        tunable-white mode on WiZ firmware — setPilot has no ``mode`` key, and
+        an unrecognized key would make the firmware reject the whole datagram,
+        which a fire-and-forget write would never notice. Without it, the first
+        ramp packets light a bulb at whatever stale color it restored, and any
+        parallel acknowledged ``light.turn_on`` carrying color arrives a whole
+        38-476 ms round trip later — a visible flash of wrong white.
         """
         hosts = self._hosts(entity_id)
         if not hosts:
@@ -221,10 +239,15 @@ class WizBackend(DimmingBackend):
             min_brightness=min_brightness,
         )
 
+        params: dict = {"state": True}
+        if color_temp_kelvin is not None:
+            params["temp"] = int(color_temp_kelvin)
+            self._last_temp[entity_id] = int(color_temp_kelvin)
+
         async def _tick(_now: datetime) -> None:
             target = fade.advance()
             self._last[entity_id] = target
-            self._send(hosts, {"state": True, "dimming": to_dimming(target)})
+            self._send(hosts, {**params, "dimming": to_dimming(target)})
             if fade.done:
                 self._stop_job(entity_id)
                 # HA's state machine went stale while the writes bypassed it.
@@ -257,6 +280,9 @@ class WizBackend(DimmingBackend):
         start = current_brightness(self.hass, entity_id)
         if start is None:  # unavailable
             return None
+        # A move makes no color promise; a color left over from a superseded
+        # fade must not be re-asserted by this job's resync.
+        self._last_temp.pop(entity_id, None)
 
         gamma, min_brightness = curve_shape(self._entry, curve)
         ramp = Ramp(
@@ -318,6 +344,7 @@ class WizBackend(DimmingBackend):
         current = current_brightness(self.hass, entity_id)
         if current is None:
             return
+        self._last_temp.pop(entity_id, None)
         gamma, min_brightness = curve_shape(self._entry, curve)
         # A step is a percentage of *perceived* travel, so one tap moves the same
         # apparent amount at the bottom of the range as at the top.

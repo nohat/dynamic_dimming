@@ -392,3 +392,74 @@ async def test_unload_cancels_jobs_and_closes_socket(hass):
     # An unload mid-move must not leave a 20 Hz interval firing at a dead socket.
     assert len(sock.sent) == sent_at_unload
     assert sock.closed
+
+
+# -- fade ---------------------------------------------------------------------
+
+
+async def test_fade_streams_udp_toward_target(hass):
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=50)
+    calls = _turn_on_calls(hass)
+    backend, sock = await _backend(hass)
+
+    await backend.async_fade(entity_id, 255, 0.5)
+    await _advance(hass, 10)
+
+    assert sock.dimmings == sorted(sock.dimmings)
+    assert sock.dimmings[-1] == 100  # landed on the target
+    # Only the end-of-fade resync goes through the acknowledged path.
+    assert len(calls) == 1
+    assert calls[0]["brightness"] == 255
+
+
+async def test_fade_color_temp_rides_in_every_datagram(hass):
+    # The whole point of the parameter: the *first* packet must already carry
+    # the color, and every later one re-asserts it so a lost datagram is
+    # corrected a tick later — same philosophy as the absolute brightness.
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=50)
+    calls = _turn_on_calls(hass)
+    backend, sock = await _backend(hass)
+
+    await backend.async_fade(entity_id, 255, 0.5, color_temp_kelvin=2700)
+    await _advance(hass, 10)
+
+    assert sock.sent
+    assert all(p["params"]["temp"] == 2700 for p, _ in sock.sent)
+    # setPilot has no "mode" key; `temp` alone selects tunable-white mode, and
+    # an unknown key would make the firmware reject the whole datagram.
+    assert all("mode" not in p["params"] for p, _ in sock.sent)
+    # The resync teaches HA's state machine the color as well as the level.
+    assert len(calls) == 1
+    assert calls[0]["color_temp_kelvin"] == 2700
+
+
+async def test_fade_without_color_sends_no_temp(hass):
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=50)
+    calls = _turn_on_calls(hass)
+    backend, sock = await _backend(hass)
+
+    await backend.async_fade(entity_id, 255, 0.5)
+    await _advance(hass, 10)
+
+    assert sock.sent
+    assert all("temp" not in p["params"] for p, _ in sock.sent)
+    assert len(calls) == 1
+    assert "color_temp_kelvin" not in calls[0]
+
+
+async def test_move_after_color_fade_does_not_reassert_stale_temp(hass):
+    # A move makes no color promise. If it supersedes a color-carrying fade,
+    # its resync must not re-assert a temperature that may have moved on.
+    entity_id = wiz_light(hass, "bulb", "192.168.1.17", brightness=50)
+    calls = _turn_on_calls(hass)
+    backend, sock = await _backend(hass)
+
+    await backend.async_fade(entity_id, 255, 5.0, color_temp_kelvin=2700)
+    await _advance(hass, 2)
+    await backend.async_move(entity_id, DIRECTION_UP, "medium")
+    await _advance(hass, 2)
+    await backend.async_stop(entity_id)
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert "color_temp_kelvin" not in calls[0]

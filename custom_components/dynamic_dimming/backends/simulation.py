@@ -107,6 +107,7 @@ class SimulationBackend(DimmingBackend):
         target_brightness: int,
         duration: float,
         curve: str | float | None = None,
+        color_temp_kelvin: int | None = None,
     ) -> CALLBACK_TYPE | None:
         """Fade by writing absolute brightness through the light entity.
 
@@ -114,6 +115,10 @@ class SimulationBackend(DimmingBackend):
         and it is a good one: because each tick carries an absolute value, the
         fade always lands exactly on the target however many ticks were dropped
         on the way.
+
+        ``color_temp_kelvin`` goes out with the first write only: this is an
+        acknowledged transport, so once asserted the color sticks, and
+        repeating it 20 times a second would just tax the device for nothing.
         """
         gamma, min_brightness = self._shape(curve)
         start = current_brightness(self.hass, entity_id)
@@ -125,12 +130,18 @@ class SimulationBackend(DimmingBackend):
             gamma=gamma,
             min_brightness=min_brightness,
         )
+        pending_temp = color_temp_kelvin
 
         async def _tick(_now: datetime) -> None:
+            nonlocal pending_temp
             target = fade.advance()
+            data: dict = {"entity_id": entity_id, "brightness": int(round(target))}
+            if pending_temp is not None:
+                data["color_temp_kelvin"] = int(pending_temp)
+                pending_temp = None
             await self.hass.services.async_call(
                 "light", "turn_on",
-                {"entity_id": entity_id, "brightness": int(round(target))},
+                data,
                 blocking=False,
             )
             if fade.done:

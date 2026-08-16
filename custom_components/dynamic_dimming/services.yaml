@@ -81,7 +81,7 @@ fade:
     Fade a light to an absolute brightness over a fixed duration. Unlike move,
     which is relative and open-ended, this promises a level at a time -- which
     is what a scene transition needs. Use it for lights whose platform cannot
-    honour light.turn_on's `transition`, notably WiZ.
+    honor light.turn_on's `transition`, notably WiZ.
   fields:
     entity_id:
       required: true
@@ -104,6 +104,19 @@ fade:
           max: 120
           step: 0.1
           unit_of_measurement: s
+    color_temp_kelvin:
+      required: false
+      description: >-
+        White color temperature to assert from the fade's very first write.
+        Without it, a fade lights the bulb at whatever color it last had, and
+        a parallel acknowledged light.turn_on carrying the color lands whole
+        round-trips later -- a visible flash of stale white. The color does
+        not fade; only brightness does.
+      selector:
+        color_temp:
+          unit: kelvin
+          min: 1000
+          max: 10000
     backend:
       required: false
       default: auto

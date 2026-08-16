@@ -14,6 +14,7 @@ from custom_components.dynamic_dimming.const import (
     BACKEND_SIMULATED,
     DEFAULT_STEP_PCT,
     DOMAIN,
+    SERVICE_FADE,
     SERVICE_MOVE,
     SERVICE_STEP,
     SERVICE_STOP,
@@ -156,3 +157,44 @@ async def test_unload_entry_deregisters_services_and_drops_controller(hass):
     assert not hass.services.has_service(DOMAIN, SERVICE_STOP)
     assert not hass.services.has_service(DOMAIN, SERVICE_STEP)
     assert entry.entry_id not in hass.data[DOMAIN]
+
+
+async def test_fade_service_dispatches_with_color_temp(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("color_temp",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_fade"
+    ) as mock_fade:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_FADE,
+            {"entity_id": "light.lamp", "brightness_pct": 100, "duration": 2,
+             "color_temp_kelvin": 2700},
+            blocking=True,
+        )
+    args = mock_fade.await_args.args
+    assert args == ("light.lamp", 255, 2.0, BACKEND_AUTO, None, 2700)
+
+
+async def test_fade_service_color_temp_is_optional(hass):
+    await _setup_entry(hass)
+    set_light_state(hass, "light.lamp", brightness=100, color_modes=("color_temp",))
+    with patch(
+        "custom_components.dynamic_dimming.controller.DimmingController.async_fade"
+    ) as mock_fade:
+        await hass.services.async_call(
+            DOMAIN, SERVICE_FADE,
+            {"entity_id": "light.lamp", "brightness_pct": 50, "duration": 1},
+            blocking=True,
+        )
+    assert mock_fade.await_args.args[-1] is None
+
+
+async def test_fade_service_rejects_out_of_range_kelvin(hass):
+    await _setup_entry(hass)
+    with pytest.raises(vol.Invalid):
+        await hass.services.async_call(
+            DOMAIN, SERVICE_FADE,
+            {"entity_id": "light.lamp", "brightness_pct": 50, "duration": 1,
+             "color_temp_kelvin": 40000},
+            blocking=True,
+        )
