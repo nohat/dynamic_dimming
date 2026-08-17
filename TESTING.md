@@ -102,7 +102,24 @@ The protocol half was driven by a stdlib websocket client run from the SSH add-o
 
 Fixed in v0.6.1 by sending an explicit `null`, which both server implementations accept and which is the spec's way of saying "use the device's own `OnOffTransitionTime`". Re-ran the suite afterwards: **13/13**.
 
-**Still unverified.** M4, M6 and M7 exercise the backend running inside Home Assistant — state convergence, reconnect after a server bounce, and the fallback to simulation when Matter is unloaded. They need v0.6.1 deployed to `/config/custom_components` and a core restart, which this pass did not do.
+#### In-Home-Assistant results — v0.6.1 deployed to CA
+
+v0.6.1 installed to `/config/custom_components` and HA restarted (2026.8.2). The integration loaded clean — no `dynamic_dimming` or `matter` entries in the error log — and registered all four services.
+
+| # | Result |
+|---|---|
+| Claim | **Pass.** `move` with `backend: native` is accepted rather than raising, so the Matter backend claims the entity through the real registry |
+| M4 | **Pass.** Brightness 100 → 255 during a 2 s hold, settled the instant `stop` landed and held across six samples. HA's state machine converged on its own — the resync the WiZ path needs is genuinely unnecessary here |
+| Step | **Pass** through the deployed service: 255 → 230 |
+| Fade | **Pass** through the deployed service: gradual (238 mid-fade), landed on 255 |
+
+**M6 and M7 remain unrun.** M6 needs the Matter server stopped, which takes all 96 Matter entities at this house — kitchen pendants included — offline for the duration; M7 needs the Matter integration disabled, with the same reach. Both want a deliberate maintenance window.
+
+One caveat on M7's expected outcome as written above. Disabling the Matter integration does not leave a working entity for simulation to drive: the entity goes unavailable, `classify` sees no `supported_color_modes` and returns `UNSUPPORTED`, and `move` is dropped before any backend is consulted. The simulation fallback that `claims()` guards is the narrower case where Matter's *registry entries* outlive the loaded integration. Worth rewriting M7 around that before running it.
+
+#### Unrelated defect surfaced by this run
+
+Driving the services through a generic client failed with `invalid_format - value should be a string for dictionary value @ data['entity_id']`. All four services declare `cv.entity_id`, which takes a single string, so any caller passing a list — an automation using `target:`, or most API wrappers — is rejected. Pre-existing, not Matter-specific, and already the subject of a workaround in the CA lighting generator (`build-mv-lighting.py`, "Learned the hard way, 2026-08-07"). Tracked separately.
 
 ## Recording results
 
