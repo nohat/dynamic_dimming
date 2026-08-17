@@ -45,6 +45,22 @@ DEFAULT_Z2M_BASE_TOPIC = "zigbee2mqtt"
 CONF_CURVE = "curve"
 CONF_MIN_BRIGHTNESS = "min_brightness"
 
+# Matter
+MATTER_DOMAIN = "matter"
+# Level Control cluster and its Move/Step direction enums (Matter Application
+# Clusters spec, "Level Control"). Color temperature rides on Color Control.
+MATTER_LEVEL_CONTROL_CLUSTER = 0x0008
+MATTER_COLOR_CONTROL_CLUSTER = 0x0300
+MATTER_MOVE_MODE_UP = 0x00
+MATTER_MOVE_MODE_DOWN = 0x01
+# Matter levels run 1-254: 0 is "off" (and only reachable via the WithOnOff
+# command variants) and 255 is reserved.
+MATTER_MIN_LEVEL = 1
+MATTER_MAX_LEVEL = 254
+# Move `rate` is a uint8 of level units per second, so it shares the 1-254 range.
+# transitionTime is a uint16 of *tenths* of a second, with 65535 reserved for null.
+MATTER_MAX_TRANSITION_TENTHS = 65534
+
 # WiZ
 WIZ_DOMAIN = "wiz"
 WIZ_PORT = 38899

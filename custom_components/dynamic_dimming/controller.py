@@ -9,6 +9,7 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .backends.base import DimmingBackend
+from .backends.matter import MatterBackend
 from .backends.simulation import SimulationBackend
 from .backends.tasmota import TasmotaBackend
 from .backends.wiz import WizBackend
@@ -34,6 +35,7 @@ class DimmingController:
         self.native_backends: list[DimmingBackend] = [
             Z2MBackend(hass, entry),
             TasmotaBackend(hass),
+            MatterBackend(hass, entry),
             WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
