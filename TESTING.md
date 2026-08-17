@@ -63,6 +63,20 @@ The Zigbee2MQTT and Tasmota entries in the fleet now classify as native: `move` 
 
 S7 (the mesh-rate measurement) is now the native-vs-simulated comparison it was designed to be: run N1 and N2 back-to-back on the Zigbee2MQTT entry and compare command counts in the Zigbee2MQTT logs.
 
+### Matter addendum (v0.6.0)
+
+The Matter entry classifies as native too, but over a websocket this integration opens itself rather than over MQTT, so it needs its own checks. N1–N3 apply as written; add:
+
+| # | Step | Expected |
+|---|---|---|
+| M1 | Hold-to-dim with the Matter server's log at debug | Exactly two `device_command` calls per gesture — `Move` on press, `Stop` on release — and no stream of `MoveToLevel` writes |
+| M2 | Let a `move` run to the bottom of the range | The light floors at its minimum on-level and stays lit; it never switches off |
+| M3 | `move` up on a Matter light that is **off** | Nothing happens. Plain `Move` leaves ExecuteIfOff clear, which is the spec-correct behavior and the same trade the Zigbee2MQTT path makes |
+| M4 | Release the button, then check the HA state | Brightness converges on its own within a second or so — the device reports `CurrentLevel` and the Matter integration's subscription carries it back. There is no resync call to look for |
+| M5 | `fade` to an absolute level over 5 s, with and without `color_temp_kelvin` | One `MoveToLevelWithOnOff` carrying `transitionTime`, preceded by a zero-transition `MoveToColorTemperature` when a color was asked for; the device runs the whole ramp |
+| M6 | Stop the Matter server add-on, then hold to dim | Nothing moves and one warning is logged — not one per press. Restart the add-on and hold again: it reconnects without reloading the integration |
+| M7 | Disable the Matter integration, then hold to dim a Matter light | Falls back to stepped simulation through `light.turn_on` rather than going dead |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
