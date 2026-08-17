@@ -24,13 +24,21 @@ def set_light_state(hass, entity_id, *, brightness=None, color_modes=("brightnes
 
 
 def register_device_light(
-    hass, object_id, *, domain, identifiers=None, connections=None, brightness=100
+    hass,
+    object_id,
+    *,
+    domain,
+    identifiers=None,
+    connections=None,
+    brightness=100,
+    unique_id=None,
 ):
     """Register light.<object_id> backed by a device from integration ``domain``.
 
     Mirrors how a real integration populates the registries: config entry ->
     device (with the given identifiers/connections) -> entity. Sets a
-    brightness-capable state and returns the entity_id.
+    brightness-capable state and returns the entity_id. ``unique_id`` matters
+    for the backends that recover an address from it (ZHA, Z-Wave JS).
     """
     entry = MockConfigEntry(domain=domain)
     entry.add_to_hass(hass)
@@ -42,7 +50,7 @@ def register_device_light(
     er.async_get(hass).async_get_or_create(
         "light",
         domain,
-        f"uid_{object_id}",
+        unique_id if unique_id is not None else f"uid_{object_id}",
         suggested_object_id=object_id,
         device_id=device.id,
     )

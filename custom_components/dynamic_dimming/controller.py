@@ -14,6 +14,8 @@ from .backends.simulation import SimulationBackend
 from .backends.tasmota import TasmotaBackend
 from .backends.wiz import WizBackend
 from .backends.z2m import Z2MBackend
+from .backends.zha import ZhaBackend
+from .backends.zwave_js import ZwaveJsBackend
 from .capability import classify
 from .const import (
     BACKEND_NATIVE,
@@ -36,6 +38,8 @@ class DimmingController:
             Z2MBackend(hass, entry),
             TasmotaBackend(hass),
             MatterBackend(hass, entry),
+            ZhaBackend(hass),
+            ZwaveJsBackend(hass),
             WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
@@ -155,4 +159,9 @@ class DimmingController:
         if target is None:
             _LOGGER.debug("step ignored: %s is unsupported", entity_id)
             return
+        # As for fade: a native backend without a relative step is not an error,
+        # it falls back. Simulation reads the level and writes an absolute one,
+        # which costs the same single command a native step would have.
+        if not target.supports_step:
+            target = self._simulation
         await target.async_step(entity_id, direction, step_pct, curve)

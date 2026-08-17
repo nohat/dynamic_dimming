@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import pytest
 from homeassistant.exceptions import ServiceValidationError
-from pytest_homeassistant_custom_component.common import MockConfigEntry
+from pytest_homeassistant_custom_component.common import (
+    MockConfigEntry,
+    async_mock_service,
+)
 
 from custom_components.dynamic_dimming.const import (
     BACKEND_NATIVE,
@@ -12,6 +15,8 @@ from custom_components.dynamic_dimming.const import (
     DIRECTION_DOWN,
     DIRECTION_UP,
     DOMAIN,
+    ZWAVE_JS_DOMAIN,
+    ZWAVE_JS_SERVICE_INVOKE_CC_API,
 )
 from custom_components.dynamic_dimming.controller import DimmingController
 
@@ -123,6 +128,26 @@ async def test_native_step_routes_to_claimer(hass, mqtt_mock):
     mqtt_mock.async_publish.assert_called_once_with(
         f"zigbee2mqtt/{IEEE}/set", '{"brightness_step": -13}', 0, False
     )
+
+
+async def test_step_falls_back_when_the_claimer_cannot_step(hass):
+    """Z-Wave has no relative step, so its steps go out as an absolute write."""
+    async_mock_service(hass, ZWAVE_JS_DOMAIN, ZWAVE_JS_SERVICE_INVOKE_CC_API)
+    turn_on = async_mock_service(hass, "light", "turn_on")
+    entity_id = register_device_light(
+        hass,
+        "dimmer",
+        domain=ZWAVE_JS_DOMAIN,
+        identifiers={(ZWAVE_JS_DOMAIN, "3245146787-16")},
+        unique_id="3245146787.16-38-0-currentValue",
+        brightness=100,
+    )
+    controller = _controller(hass)
+    assert controller._claimer(entity_id) is not None
+    await controller.async_step(entity_id, DIRECTION_UP, 5.0)
+    await hass.async_block_till_done()
+    assert len(turn_on) == 1
+    assert turn_on[0].data["brightness"] > 100
 
 
 async def test_unload_cancels_active_jobs(hass):

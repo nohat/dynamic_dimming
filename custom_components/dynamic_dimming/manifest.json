@@ -9,7 +9,9 @@
   "after_dependencies": [
     "matter",
     "mqtt",
-    "tasmota"
+    "tasmota",
+    "zha",
+    "zwave_js"
   ],
   "documentation": "https://github.com/nohat/dynamic_dimming",
   "integration_type": "service",

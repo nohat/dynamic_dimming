@@ -37,6 +37,20 @@ class DimmingBackend(ABC):
         """
         return False
 
+    @property
+    def supports_step(self) -> bool:
+        """Whether this backend has a native single-step command.
+
+        Default ``True``: every protocol that offers Move/Stop has so far
+        offered a relative Step alongside it. Z-Wave's Multilevel Switch is the
+        exception — it has StartLevelChange and StopLevelChange but nothing to
+        nudge a level once — so a backend that says ``False`` here has its steps
+        routed through simulation, which reads the current level and writes an
+        absolute one. A step is a single command either way, so nothing is lost
+        on the wire by falling back.
+        """
+        return True
+
     async def async_fade(
         self,
         entity_id: str,

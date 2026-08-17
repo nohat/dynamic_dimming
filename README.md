@@ -19,19 +19,20 @@
 Home Assistant's `light.turn_on` only sets a target brightness; there's no
 "start dimming / stop dimming" the way a wall dimmer works. Dynamic Dimming adds
 its own `move` / `stop` / `step` / `fade` services. On platforms whose protocol
-already has move/stop commands — **Zigbee2MQTT, Tasmota and Matter** today — it
-sends those natively so the device dims itself. **WiZ** has no such command, so
-it gets a native *transport* instead: the ramp is still stepped, but over direct
+already has move/stop commands — **Zigbee2MQTT, Tasmota, Matter, ZHA and Z-Wave
+JS** today — it sends those natively so the device dims itself. **WiZ** has no
+such command, so it gets a native *transport* instead: the ramp is still
+stepped, but over direct
 fire-and-forget UDP rather than through `light.turn_on`. On every other dimmable
 light it falls back to *simulation*: stepping `light.turn_on` at a fixed rate on a
 timer until you stop it or it reaches the end. Either way it works with any
 dimmable light entity.
 
-> **v0.6.0 scope:** native Zigbee2MQTT, Tasmota, Matter and WiZ backends, with
-> stepped simulation as the fallback everywhere else. Stepped ramps travel on a
-> perceptual curve by default. Higher rates take bigger steps (not more
-> commands), so a hold doesn't flood your mesh. Further native backends (ZHA,
-> Z-Wave JS, Hue) come later.
+> **v0.6.0 scope:** native Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS and WiZ
+> backends, with stepped simulation as the fallback everywhere else. Stepped
+> ramps travel on a perceptual curve by default. Higher rates take bigger steps
+> (not more commands), so a hold doesn't flood your mesh. Further native
+> backends (Shelly, Hue) come later.
 
 ## Dimming curve
 
@@ -57,8 +58,9 @@ the same apparent change at either end of the range.
 Set the default in the integration's options, or override per call with the
 `curve` field on `move`, `step` and `fade`. It applies only where this
 integration steps the ramp itself — the simulation and WiZ paths. Backends that
-hand the ramp to device firmware (Zigbee2MQTT, Tasmota, Matter) ignore it: the
-device's own curve applies, and this integration does not mutate device config.
+hand the ramp to device firmware (Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS)
+ignore it: the device's own curve applies, and this integration does not mutate
+device config.
 
 ### Minimum brightness
 
@@ -148,10 +150,12 @@ On platforms whose protocol already has move/stop commands, the integration send
 | Zigbee2MQTT | `brightness_move` / `brightness_step` published to the device's `/set` topic | Rate profiles map directly to Z2M's units-per-second. Plain `brightness_move` is used (never `brightness_move_onoff`), so dimming down stops at the lowest on-level. The base topic is configurable in the integration's options if yours is not `zigbee2mqtt`. |
 | Tasmota | `Dimmer >` / `Dimmer <` / `Dimmer !` on the device's command topic for move/stop, `Dimmer +` / `Dimmer -` for step | Ramp speed and step size are the device's own `Speed`, `Fade`, and `DimmerStep` settings; the `rate` and `step_pct` fields are ignored on this path, and `Fade 1` must be enabled on the device for a visible ramp. |
 | Matter | Level Control cluster `Move` / `Stop` / `Step`, sent as `device_command` calls over the integration's **own websocket** to the Matter server | Home Assistant's Matter integration surfaces no move/stop anywhere — not on the light platform, not as a service, not in its websocket API — so this backend opens its own connection to the same server the Matter config entry points at. Rate profiles map directly to Matter's level-units-per-second. Plain `Move`/`Step` are used (never the `WithOnOff` variants), so dimming down stops at the lowest on-level; the flip side, per the spec's Options handling, is that a `move` on a light that is **off** does nothing. `fade` is native too, as one `MoveToLevelWithOnOff` with a transition time — on Thread that is one command instead of forty. |
+| ZHA | Level Control cluster `Move` / `Stop` / `Step`, issued through ZHA's own `zha.issue_zigbee_cluster_command` service | The same cluster the Zigbee2MQTT path drives, so it makes the same choices: rate profiles map directly to level-units-per-second, and plain `Move`/`Step` are used (never the `WithOnOff` variants), so dimming down stops at the lowest on-level and a `move` on a light that is **off** does nothing. No extra connection is needed — ZHA publishes a service that reaches any cluster on any node, so this backend is a service call. `fade` is native too, as one `MoveToLevelWithOnOff` with a transition time. Group lights are not claimed (they need a group command) and fall back to simulation. |
+| Z-Wave JS | Multilevel Switch CC `StartLevelChange` / `StopLevelChange`, invoked through the `zwave_js.invoke_cc_api` service | Z-Wave carries no rate — only the time a full-scale sweep should take — so the rate profiles become durations of 6 s, 3 s and 2 s. The encoding is whole seconds, which is coarse, but the device still runs the ramp. Targeting the service by entity is what makes a multi-channel dimmer address its own channel rather than endpoint 0. The command class has **no** relative step, so `step` falls back to a single absolute write, which costs exactly what a native step would have. `fade` also falls back: `Set` with a duration can only express whole seconds, and the fade service promises an exact level at an exact time. |
 | WiZ | A stream of absolute `setPilot` datagrams straight to the bulb's IP on UDP 38899, sent fire-and-forget at the tick rate | WiZ firmware has no ramp command and the HA integration doesn't advertise `TRANSITION`, so the ramp still has to be stepped — but not through `light.turn_on`. An acknowledged `setPilot` round-trip measures 38–476 ms (median ~160 ms), which a 20 Hz ramp cannot wait on; the same datagram sent unacknowledged costs ~0.3 ms. Every tick carries an absolute level, so a dropped datagram self-corrects on the next one. A light **group** whose members are all WiZ bulbs is claimed too, and driven from a single tick so the bulbs stay visibly in step. |
 | Everything else | Stepped simulation | |
 
-Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine goes stale while a bulb is moving; `stop` and `step` re-assert the final level through the light entity to put the two back in agreement. The Matter path needs no such reconciliation: the device reports its own `CurrentLevel` and the Matter integration's existing subscription feeds that straight back into Home Assistant.
+Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine goes stale while a bulb is moving; `stop` and `step` re-assert the final level through the light entity to put the two back in agreement. The Matter, ZHA and Z-Wave JS paths need no such reconciliation: the device reports its own level and each integration's existing subscription feeds that straight back into Home Assistant.
 
 Selection is automatic. `move`, `step` and `fade` also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light.
 
