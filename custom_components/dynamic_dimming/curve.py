@@ -40,7 +40,7 @@ CURVE_PERCEPTUAL = "perceptual"
 
 # Named curves map to a gamma exponent applied to the 0..1 position:
 #   brightness_fraction = position ** gamma
-# 1.0 is the old linear behaviour. 3.0 closely tracks CIE L*, the standard
+# 1.0 is the old linear behavior. 3.0 closely tracks CIE L*, the standard
 # perceptual lightness scale, without its piecewise linear toe — the toe only
 # matters below ~1% luminance, which is under the usable floor of every device
 # this integration drives.

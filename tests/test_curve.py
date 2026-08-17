@@ -144,7 +144,7 @@ def test_ramp_floor_is_the_configured_minimum():
     assert all(v >= 26.0 for v in values)
 
 
-def test_curve_shape_reads_entry_options_and_honours_override():
+def test_curve_shape_reads_entry_options_and_honors_override():
     class Entry:
         options = {"curve": CURVE_LINEAR, "min_brightness": 26}
 

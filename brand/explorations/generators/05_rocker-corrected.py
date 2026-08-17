@@ -28,7 +28,7 @@ def front_and_led(with_side_x_shift=0):
     <!-- crisp coplanar edge highlights (top & bottom, frontmost) -->
     <rect x="{FX}" y="{FY}" width="{FW}" height="10" fill="{EDGE}" fill-opacity="0.9"/>
     <rect x="{FX}" y="{FY+FH-10}" width="{FW}" height="10" fill="{EDGE}" fill-opacity="0.9"/>
-    <!-- recessed centre seam shadow -->
+    <!-- recessed center seam shadow -->
     <rect x="{FX}" y="{tSeam-6}" width="{FW}" height="30" fill="{DEEP}" fill-opacity="0.75" filter="url(#soft)"/>
   </g>
   <rect x="{fx}" y="{FY}" width="{FW}" height="{FH}" rx="{FR}" fill="none" stroke="{DEEP}" stroke-opacity="0.5" stroke-width="4" transform="translate(0,0)"/>'''
