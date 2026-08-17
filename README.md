@@ -5,7 +5,7 @@
 <h1 align="center">Dynamic Dimming</h1>
 
 <p align="center">
-  <strong>Hold-to-dim for Home Assistant lights that don't support it natively.</strong>
+  <strong>Hold-to-dim for Home Assistant, using the command your light already speaks.</strong>
 </p>
 
 <p align="center">
@@ -16,23 +16,26 @@
 
 ---
 
-Home Assistant's `light.turn_on` only sets a target brightness; there's no
-"start dimming / stop dimming" the way a wall dimmer works. Dynamic Dimming adds
-its own `move` / `stop` / `step` / `fade` services. On platforms whose protocol
-already has move/stop commands — **Zigbee2MQTT, Tasmota, Matter, ZHA and Z-Wave
-JS** today — it sends those natively so the device dims itself. **WiZ** has no
-such command, so it gets a native *transport* instead: the ramp is still
-stepped, but over direct
-fire-and-forget UDP rather than through `light.turn_on`. On every other dimmable
-light it falls back to *simulation*: stepping `light.turn_on` at a fixed rate on a
-timer until you stop it or it reaches the end. Either way it works with any
-dimmable light entity.
+Most lighting protocols have had a hold-to-dim primitive for years: Zigbee's
+Level Control `Move`/`Stop`, Z-Wave's `StartLevelChange`/`StopLevelChange`, the
+same pair inherited by Matter. Home Assistant has no way to ask for it —
+`light.turn_on` sets a target brightness and that is the whole vocabulary — so
+the capability sits unused in hardware you already own.
 
-> **v0.6.0 scope:** native Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS and WiZ
-> backends, with stepped simulation as the fallback everywhere else. Stepped
-> ramps travel on a perceptual curve by default. Higher rates take bigger steps
-> (not more commands), so a hold doesn't flood your mesh. Further native
-> backends (Shelly, Hue) come later.
+Dynamic Dimming adds the missing verbs: `move` / `stop` / `step` / `fade`. On
+**Zigbee2MQTT, Tasmota, Matter, ZHA and Z-Wave JS** it sends the protocol's own
+command — one message starts the ramp, one stops it, and the device does the
+dimming itself, with no stream of brightness writes crossing your mesh. **WiZ**
+has no such command, so it gets a native *transport* instead: still stepped, but
+over direct fire-and-forget UDP rather than through `light.turn_on`. Everything
+else falls back to stepped simulation on a perceptual curve. Every dimmable
+light works — the ones whose protocol supports it work best.
+
+> **v0.6.0 scope:** the six native backends listed below, with stepped
+> simulation as the fallback everywhere else. Simulated ramps travel a
+> perceptual curve by default, and a higher rate takes bigger steps rather than
+> more of them — so even the fallback doesn't flood your mesh. Shelly and Hue
+> come next.
 
 ## Dimming curve
 
