@@ -177,6 +177,74 @@ duration: S4 records why claiming manual control is not enough.
 
 Driving the services through a generic client failed with `invalid_format - value should be a string for dictionary value @ data['entity_id']`. All four services declare `cv.entity_id`, which takes a single string, so any caller passing a list — an automation using `target:`, or most API wrappers — is rejected. Pre-existing, not Matter-specific, and already the subject of a workaround in the CA lighting generator (`build-mv-lighting.py`, "Learned the hard way, 2026-08-07"). Tracked separately.
 
+### WiZ addendum (v0.6.0)
+
+WiZ is the odd one out and needs the most testing per line of code. Every other
+native backend hands a ramp to firmware and gets to be small. This one has no
+firmware ramp to hand off to — WiZ has no move command and the HA integration
+advertises no `TRANSITION` — so it steps the ramp itself and only the
+*transport* is native: raw `setPilot` datagrams to UDP 38899, fire-and-forget at
+the 20 Hz tick.
+
+That buys a smooth ramp and costs three things nothing else in this integration
+has to deal with, and **none of them has ever run on hardware**:
+
+- **A state machine that goes stale on purpose.** Writes bypass `light.turn_on`
+  entirely, so Home Assistant believes the old brightness for the whole gesture.
+  `async_stop` and `async_step` call `_resync` to re-assert the final level
+  through the light entity afterwards. Nothing else here needs reconciling.
+- **Group fan-out.** `_hosts` walks a group's members recursively and claims it
+  only if *every* leaf is a WiZ bulb, then drives them all from one tick so a
+  multi-bulb fixture stays visibly in step. A single non-WiZ member drops the
+  whole group to simulation.
+- **A hundred-step device.** WiZ `dimming` is 1–100 against Home Assistant's
+  0–255, so `to_dimming` quantizes hard. At `rate: slow` the commanded value
+  changes roughly sixteen times a second against twenty ticks — many ticks send a
+  value identical to the last one. Whether that reads as smooth or as stepping is
+  the question the whole perceptual-curve design is trying to answer, and this is
+  the only fleet device coarse enough to show it.
+
+Fleet entry: the two HALO HLB6099WZRGBWMWR downlights. **Check which instance
+they are on first** — both campaigns so far ran on CA, and the deploy and logging
+prerequisites have to be redone if these live on the other box.
+
+#### Prerequisites beyond the usual
+
+- **A packet capture.** `tcpdump -i any -n udp port 38899` on the HA host is the
+  only way to see what this backend actually emits — the writes never touch the
+  service log. W3 and W4 depend on it.
+- **An acknowledged probe.** The backend deliberately discards replies, so it
+  cannot tell you whether the firmware *accepted* a datagram. A ten-line script
+  that sends one `setPilot` and reads the reply answers W8, which is otherwise
+  unanswerable. Expect `{"result":{"success":true}}`.
+
+| # | Step | Expected |
+|---|---|---|
+| W1 | Confirm both downlights' IPs from their WiZ config entries, and record firmware versions | `_host` reads `CONF_HOST` off the config entry. The docstring's latency figures were measured against SHRGB 1.37/1.38; note whether these match |
+| W2 | `move` up with `backend: native`, then `stop` | Ramps and holds. As elsewhere, `native` raising would prove the backend did not claim it |
+| W3 | Capture a full `move` gesture | ~20 datagrams per second per bulb, each carrying an **absolute** `dimming` and `"state": true`. Confirm the rate, and that no datagram carries a relative value |
+| W4 | In the same capture, count **duplicate** consecutive `dimming` values at `rate: slow` | This is the quantization question. Roughly sixteen distinct values a second against twenty ticks means about a fifth of the datagrams are redundant. Record the real ratio — it bounds how much traffic could be saved by suppressing unchanged writes |
+| W5 | Watch the entity's brightness in the UI **during** a move | It should sit visibly stale — that is the design, not a bug. Record how far it diverges by the end of a full-range gesture |
+| W6 | Release, then watch it converge | `_resync` re-asserts the last commanded level through `light.turn_on`. Confirm HA catches up, and that the bulb does **not** visibly jump when it lands — the resync writes the value the bulb already has, so it should be invisible |
+| W7 | `step` up and down 5% | UDP first for immediate visible change, then `_resync`. Confirm both halves happen and the round trip returns to the starting level |
+| W8 | Probe an acknowledged `setPilot` carrying `temp` | Tests a firmware claim `async_fade`'s docstring makes and the backend structurally cannot check: that `temp` alone selects tunable-white mode, and that no key in the payload is unrecognized. **An unrecognized key makes the firmware reject the whole datagram, and a fire-and-forget write would never notice.** Confirm `success: true` for the exact payload the backend sends |
+| W9 | `fade` over 5 s with `color_temp_kelvin` | `temp` rides in **every** datagram, not just the first — the opposite of the Zigbee and Matter paths, and for a stated reason: a lost packet is corrected 50 ms later. Confirm in the capture, then confirm the bulb lands on the right white with no flash of the stale one |
+| W10 | `fade` to an exact level, then read the entity back | The fade's whole justification is that HA cannot fade a WiZ bulb at all. Confirm it lands **exactly** on target — this path writes absolute values, so unlike the firmware backends it has no excuse for missing |
+| W11 | `move` down to the rail at the default `min_brightness: 1` | Record where it bottoms out and whether the bulb is still emitting light. The README claims WiZ's own `minDimLevel` is 10 of 100 — so the bottom third of the default range may be visually dead. This is the claim behind the whole minimum-brightness setting and it has never been checked against these bulbs |
+| W12 | Repeat W11 with `min_brightness: 26` | The README's recommended floor. Confirm the bottom of the hold stops looking dead, and that the perceptual curve now spends its travel where the bulb responds |
+| W13 | Same hold at `curve: perceptual` and `curve: linear` | WiZ is one of only two paths where `curve` does anything. With 100 levels the difference should be more visible here than anywhere else — linear should race the bottom and crawl the top |
+| W14 | Make a light group of **both** downlights; `move` on the group | Claimed as native. One tick fans out to both IPs, so they stay visibly in step. Compare against `backend: simulated` on the same group, which drives per-entity — record how far apart the two bulbs drift |
+| W15 | Add any non-WiZ light to that group, `move` again | **Not** claimed. All-or-nothing: one foreign member drops the whole group to simulation rather than driving half of it over UDP. Confirm via the capture that no datagrams go out |
+| W16 | Verify `_hosts` actually reads what it thinks | It resolves members from the state attribute `entity_id`. Confirm the group exposes that attribute — if the group platform in use exposes members differently, the group path silently never claims |
+| W17 | Power-cycle one bulb mid-`move` | `async_move` bails when `current_brightness` is None, and the tick self-cancels when the entity goes unavailable. Confirm the job ends rather than streaming into the void, and that nothing spams the log |
+| W18 | `fade` with color, then `move` on the same bulb without stopping | The move pops `_last_temp`, so the move's resync must **not** re-assert the fade's color. Confirm the bulb keeps its white but the move's level wins |
+| W19 | Long soak — three or four full-range gestures back to back | The socket drains at most 32 replies per tick and discards them. Confirm no socket errors, no growing latency, and that the receive buffer does not wedge |
+
+**Traffic note for context.** `async_fade`'s docstring mentions this house has 24
+WiZ lamps. Two bulbs at 20 Hz is 40 datagrams a second; a whole-house scene fade
+across 24 would be ~480/s from one socket. That is not what this campaign tests,
+but W3's measured per-bulb rate is what any such estimate has to be built on.
+
 ### ZHA addendum (v0.6.0)
 
 ZHA is the first backend that drives another integration's **public service**
