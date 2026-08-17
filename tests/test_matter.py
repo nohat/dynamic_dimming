@@ -358,9 +358,24 @@ async def test_step_converts_pct_to_level_units(hass, session):
     payload = session.sockets[URL].args[0]["payload"]
     assert payload["stepMode"] == 1
     assert payload["stepSize"] == 13  # 5% of 254
-    # Omitted so the server's default (null) tells the device to use its own
-    # OnOffTransitionTime rather than snapping.
-    assert "transitionTime" not in payload
+    await backend.async_unload()
+
+
+async def test_step_sends_transition_time_as_an_explicit_null(hass, session):
+    # Regression: transitionTime is mandatory-but-nullable. Omitting the key
+    # relies on the server supplying the default, which matter.js does not --
+    # it rejects the whole command with ValidationMandatoryFieldMissingError and
+    # the step never reaches the device. Verified against matter-server 1.4.0
+    # (matter.js 0.17.9): omitted is refused, explicit null works.
+    entity_id = matter_light(hass)
+    backend = MatterBackend(hass)
+
+    await backend.async_step(entity_id, DIRECTION_UP, 5.0)
+    await _drain(hass)
+
+    payload = session.sockets[URL].args[0]["payload"]
+    assert "transitionTime" in payload
+    assert payload["transitionTime"] is None
     await backend.async_unload()
 
 

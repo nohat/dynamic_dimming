@@ -371,9 +371,7 @@ class MatterBackend(DimmingBackend):
         step_pct: float,
         curve: str | float | None = None,
     ) -> None:
-        # `curve` intentionally unused, as for `move`. `transitionTime` is
-        # omitted so it defaults to null, which tells the device to use its own
-        # OnOffTransitionTime rather than snapping.
+        # `curve` intentionally unused, as for `move`.
         target = self._target(entity_id)
         if target is None:
             return
@@ -390,6 +388,14 @@ class MatterBackend(DimmingBackend):
                     else MATTER_MOVE_MODE_DOWN
                 ),
                 "stepSize": step_size,
+                # Explicitly null, not omitted. transitionTime is a *mandatory*
+                # field that happens to be nullable, and null is what asks the
+                # device to use its own OnOffTransitionTime. Leaving the key out
+                # relies on the server filling the default in, which the Python
+                # server does and matter.js does not -- it answers
+                # ValidationMandatoryFieldMissingError and the step is silently
+                # dropped. Sending the null is correct against both.
+                "transitionTime": None,
                 "optionsMask": 0,
                 "optionsOverride": 0,
             },

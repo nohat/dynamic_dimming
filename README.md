@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-e0912a.svg?style=flat-square" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-e0912a.svg?style=flat-square" alt="Home Assistant 2026.2+">
-  <img src="https://img.shields.io/badge/version-v0.6.0-e0912a.svg?style=flat-square" alt="v0.6.0">
+  <img src="https://img.shields.io/badge/version-v0.6.1-e0912a.svg?style=flat-square" alt="v0.6.1">
 </p>
 
 ---
