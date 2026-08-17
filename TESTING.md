@@ -13,6 +13,7 @@ Reference numbers, so observations map to the implementation: the simulation tic
 | Tasmota | Gosund WP6 plug |
 | Tasmota | LB01-15W-E27 bulb |
 | Zigbee2MQTT | Gledopto USB Mini LED Controller RGB+CCT |
+| ZHA | Dining room pendant (CA instance) |
 | Matter | Leedarson Smart RGBTW bulb |
 | WiZ (local UDP) | HALO HLB6099WZRGBWMWR wafer downlight ×2 |
 | Tuya (cloud) | Tuya LED BULB W509Z1 |
@@ -76,6 +77,43 @@ The Matter entry classifies as native too, but over a websocket this integration
 | M5 | `fade` to an absolute level over 5 s, with and without `color_temp_kelvin` | One `MoveToLevelWithOnOff` carrying `transitionTime`, preceded by a zero-transition `MoveToColorTemperature` when a color was asked for; the device runs the whole ramp |
 | M6 | Stop the Matter server add-on, then hold to dim | Nothing moves and one warning is logged — not one per press. Restart the add-on and hold again: it reconnects without reloading the integration |
 | M7 | Disable the Matter integration, then hold to dim a Matter light | Falls back to stepped simulation through `light.turn_on` rather than going dead |
+
+### ZHA addendum (v0.6.0)
+
+ZHA is the first backend that drives another integration's **public service**
+rather than a transport this integration owns. Nothing is sent on a socket we
+opened; every command is a `zha.issue_zigbee_cluster_command` call whose `params`
+dict is handed straight to zigpy's command schema. So the failure modes are not
+about the mesh — they are about that contract, and none of it has run against
+real hardware. The field names (`move_mode`/`rate`, `step_mode`/`step_size`/
+`transition_time`) were read out of zigpy 2.1.0's `LevelControl.ServerCommandDefs`
+and never sent. **Z1 and Z4 are the two steps that could invalidate the backend;
+run them first.**
+
+Fleet entry for this pass: the **dining room pendant** (CA instance).
+
+| # | Step | Expected |
+|---|---|---|
+| Z1 | Pre-flight. From the ZHA device page record make/model and IEEE; from **download diagnostics** record the light entity's `unique_id` and its endpoint | The backend takes the IEEE from the device registry and the endpoint from the segment after it in the `unique_id`. If that string is not `<ieee>-<endpoint>`, **stop and report it** — address parsing is the piece with no live coverage, and a quirked or multi-endpoint device is where it would break |
+| Z2 | `move` up with `backend: native` | Succeeds and the pendant ramps. Doubles as the classification probe: `native` raises a `ServiceValidationError` naming the entity when nothing claimed it, so a quiet success proves `ZhaBackend` owns this light |
+| Z3 | Add `zigpy.zcl: debug` to `logger:`, then one press-and-release hold | Exactly **two** outbound frames per gesture — `move` on press, `stop` on release. A stream of `move_to_level` writes means it silently fell through to simulation |
+| Z4 | In the same log, confirm the command was accepted, not rejected | The highest-risk item. A `TypeError`, `KeyError` or schema complaint from `zha`/`zigpy` means the installed zigpy names these fields differently than 2.1.0 does. Capture the exact traceback — it names the expected fields |
+| Z5 | Re-run P2–P4 and P8 with `backend:` omitted | Same results as the Zigbee2MQTT entry: one command per action, the device's own ramp, direction reverses cleanly with exactly one job alive |
+| Z6 | `move` down and let it run out | Floors at the lowest on-level and **stays lit**. Record the landing brightness |
+| Z7 | `move` up on a pendant that is **off** | Nothing happens. Plain `Move` leaves ExecuteIfOff clear — spec-correct, and the same trade the Zigbee2MQTT and Matter paths make |
+| Z8 | `stop` while nothing is moving | Silent no-op. Also the only live check that `Stop` is accepted with an **empty** `params` dict; its schema is all-optional, which no test covers |
+| Z9 | `step` up 5%, `step` down 5% | Two discrete nudges, no drift. `transition_time` is 0 so it snaps — compare against the Z2M entry, which puts the same 0 on the wire. They should feel identical; if they don't, the two Zigbee paths have diverged |
+| Z10 | Repeat Z5 at `rate: slow` and `rate: fast` | Roughly 6.4 s / 1.6 s full-range. The device applies its own curve, so it need not feel linear — note whether `fast` outruns the pendant |
+| Z11 | `fade` to an absolute level over 5 s, with and without `color_temp_kelvin` | One `move_to_level_with_on_off` carrying `transition_time` in **tenths** of a second. With a color asked for, a zero-transition `move_to_color_temp` lands **first**, carrying ExecuteIfOff so a fade up from off arrives at the right white rather than flashing the last one |
+| Z12 | `fade` with `color_temp_kelvin` on a light with no Color Control cluster, if the fleet has one | The color command fails, exactly one warning is logged, and **the ramp still runs**. This is the bounded-timeout path and it has only synthetic coverage |
+| Z13 | Release a hold, then watch the HA state | Brightness converges on its own within a second or so, from the device's own `current_level` report. There is no resync call to look for — unlike WiZ |
+| Z14 | Disable the ZHA integration, then hold to dim | Falls back to stepped simulation through `light.turn_on` rather than going dead. The backend treats the service's absence as the liveness check |
+| Z15 | `move` on a ZHA **group** light | Not claimed — falls back to simulation. Groups need `issue_zigbee_group_command`, which this backend does not send |
+| Z16 | Trigger `move` from an automation owned by a **non-admin** user | Still dims. `issue_zigbee_cluster_command` is an admin service and this backend deliberately passes no context, so the admin check sees no user id. If this fails, the backend is unusable from user-facing automations |
+
+S7's mesh-rate measurement now has a third arm: run Z3 against the Z2M entry's
+N1 and the same light under `backend: simulated`, and compare frame counts for
+an identical gesture.
 
 ## Recording results
 
