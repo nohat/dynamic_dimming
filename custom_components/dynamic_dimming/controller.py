@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
@@ -25,6 +26,17 @@ from .const import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+
+def _each(entity_ids: str | Iterable[str]) -> list[str]:
+    """One entity or many, always as a list.
+
+    Every public controller method takes both: a service call may target a
+    single light or a whole area, and jobs are keyed per entity either way.
+    """
+    if isinstance(entity_ids, str):
+        return [entity_ids]
+    return list(entity_ids)
 
 
 class DimmingController:
@@ -90,11 +102,22 @@ class DimmingController:
 
     async def async_move(
         self,
-        entity_id: str,
+        entity_ids: str | Iterable[str],
         direction: str,
         rate: str | float | None,
         backend: str = "auto",
         curve: str | float | None = None,
+    ) -> None:
+        for entity_id in _each(entity_ids):
+            await self._async_move_one(entity_id, direction, rate, backend, curve)
+
+    async def _async_move_one(
+        self,
+        entity_id: str,
+        direction: str,
+        rate: str | float | None,
+        backend: str,
+        curve: str | float | None,
     ) -> None:
         target = self._backend_for(entity_id, backend)
         if target is None:
@@ -111,14 +134,14 @@ class DimmingController:
 
     async def async_fade(
         self,
-        entity_id: str,
+        entity_ids: str | Iterable[str],
         target_brightness: int,
         duration: float,
         backend: str = "auto",
         curve: str | float | None = None,
         color_temp_kelvin: int | None = None,
     ) -> None:
-        """Fade ``entity_id`` to an absolute level over ``duration`` seconds.
+        """Fade each target to an absolute level over ``duration`` seconds.
 
         Routing differs from ``async_move`` in one way: a native backend that
         cannot fade is not an error, it is a fall-back. Firmware ramps are
@@ -126,6 +149,25 @@ class DimmingController:
         the device has no way to promise a level at a time -- simulation writes
         absolute values and therefore always lands on the target.
         """
+        for entity_id in _each(entity_ids):
+            await self._async_fade_one(
+                entity_id,
+                target_brightness,
+                duration,
+                backend,
+                curve,
+                color_temp_kelvin,
+            )
+
+    async def _async_fade_one(
+        self,
+        entity_id: str,
+        target_brightness: int,
+        duration: float,
+        backend: str,
+        curve: str | float | None,
+        color_temp_kelvin: int | None,
+    ) -> None:
         target = self._backend_for(entity_id, backend)
         if target is None:
             return
@@ -138,22 +180,34 @@ class DimmingController:
         if unsub is not None:
             self._jobs[entity_id] = unsub
 
-    async def async_stop(self, entity_id: str) -> None:
-        # Belt and braces: kill any simulation job AND tell a claiming native
-        # backend to stop, regardless of how the move was started — a light
-        # moved under override must never end up unstoppable.
-        self._cancel_job(entity_id)
-        native = self._claimer(entity_id)
-        if native is not None:
-            await native.async_stop(entity_id)
+    async def async_stop(self, entity_ids: str | Iterable[str]) -> None:
+        for entity_id in _each(entity_ids):
+            # Belt and braces: kill any simulation job AND tell a claiming
+            # native backend to stop, regardless of how the move was started — a
+            # light moved under override must never end up unstoppable.
+            self._cancel_job(entity_id)
+            native = self._claimer(entity_id)
+            if native is not None:
+                await native.async_stop(entity_id)
 
     async def async_step(
         self,
-        entity_id: str,
+        entity_ids: str | Iterable[str],
         direction: str,
         step_pct: float,
         backend: str = "auto",
         curve: str | float | None = None,
+    ) -> None:
+        for entity_id in _each(entity_ids):
+            await self._async_step_one(entity_id, direction, step_pct, backend, curve)
+
+    async def _async_step_one(
+        self,
+        entity_id: str,
+        direction: str,
+        step_pct: float,
+        backend: str,
+        curve: str | float | None,
     ) -> None:
         target = self._backend_for(entity_id, backend)
         if target is None:

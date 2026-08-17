@@ -1,12 +1,10 @@
 move:
   name: Move (start dimming)
   description: Start continuously changing a light's brightness until stopped.
+  target:
+    entity:
+      domain: light
   fields:
-    entity_id:
-      required: true
-      selector:
-        entity:
-          domain: light
     direction:
       required: true
       selector:
@@ -34,21 +32,16 @@ move:
 stop:
   name: Stop dimming
   description: Stop an in-progress dimming movement.
-  fields:
-    entity_id:
-      required: true
-      selector:
-        entity:
-          domain: light
+  target:
+    entity:
+      domain: light
 step:
   name: Step
   description: Apply a single relative brightness change.
+  target:
+    entity:
+      domain: light
   fields:
-    entity_id:
-      required: true
-      selector:
-        entity:
-          domain: light
     direction:
       required: true
       selector:
@@ -82,12 +75,10 @@ fade:
     which is relative and open-ended, this promises a level at a time -- which
     is what a scene transition needs. Use it for lights whose platform cannot
     honor light.turn_on's `transition`, notably WiZ.
+  target:
+    entity:
+      domain: light
   fields:
-    entity_id:
-      required: true
-      selector:
-        entity:
-          domain: light
     brightness_pct:
       required: true
       selector:

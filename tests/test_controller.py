@@ -159,6 +159,74 @@ async def test_unload_cancels_active_jobs(hass):
     assert controller._jobs == {}
 
 
+# -- fan-out: the controller takes one entity or many -------------------------
+
+
+def _two_lamps(hass):
+    for entity_id in ("light.lamp", "light.sconce"):
+        set_light_state(hass, entity_id, brightness=100)
+    return ["light.lamp", "light.sconce"]
+
+
+async def test_move_fans_out_to_every_entity(hass):
+    lamps = _two_lamps(hass)
+    controller = _controller(hass)
+    await controller.async_move(lamps, DIRECTION_UP, "medium")
+    assert set(controller._jobs) == set(lamps)
+    # Jobs are keyed per entity, so each light gets its own cancellable handle.
+    assert controller._jobs["light.lamp"] is not controller._jobs["light.sconce"]
+
+
+async def test_stop_fans_out_to_every_entity(hass):
+    lamps = _two_lamps(hass)
+    controller = _controller(hass)
+    await controller.async_move(lamps, DIRECTION_UP, "medium")
+    await controller.async_stop(lamps)
+    assert controller._jobs == {}
+
+
+async def test_stopping_one_of_many_leaves_the_others_running(hass):
+    lamps = _two_lamps(hass)
+    controller = _controller(hass)
+    await controller.async_move(lamps, DIRECTION_UP, "medium")
+    await controller.async_stop("light.lamp")
+    assert set(controller._jobs) == {"light.sconce"}
+
+
+async def test_fade_fans_out_to_every_entity(hass):
+    lamps = _two_lamps(hass)
+    controller = _controller(hass)
+    await controller.async_fade(lamps, 255, 2.0)
+    assert set(controller._jobs) == set(lamps)
+
+
+async def test_step_fans_out_to_every_entity(hass):
+    lamps = _two_lamps(hass)
+    turn_on = async_mock_service(hass, "light", "turn_on")
+    controller = _controller(hass)
+    await controller.async_step(lamps, DIRECTION_UP, 5.0)
+    await hass.async_block_till_done()
+    assert [call.data["entity_id"] for call in turn_on] == lamps
+
+
+async def test_a_single_entity_string_is_still_accepted(hass):
+    """Backward compatibility: every caller that passed one id keeps working."""
+    set_light_state(hass, "light.lamp", brightness=100)
+    controller = _controller(hass)
+    await controller.async_move("light.lamp", DIRECTION_UP, "medium")
+    assert set(controller._jobs) == {"light.lamp"}
+    await controller.async_stop("light.lamp")
+    assert controller._jobs == {}
+
+
+async def test_an_empty_target_is_a_noop(hass):
+    """An area holding no supported lights resolves to nothing to do."""
+    controller = _controller(hass)
+    await controller.async_move([], DIRECTION_UP, "medium")
+    await controller.async_stop([])
+    assert controller._jobs == {}
+
+
 async def test_simulated_override_then_native_move_cancels_sim_job(hass, mqtt_mock):
     """A sim move superseded by a plain native move must cancel the tick loop."""
     entity_id = _z2m_light(hass)

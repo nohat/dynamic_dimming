@@ -95,8 +95,9 @@ Tools → Actions).
 
 ```yaml
 service: dynamic_dimming.move
-data:
+target:
   entity_id: light.living_room
+data:
   direction: up        # up | down
   rate: medium         # optional: slow | medium | fast, or a number (brightness units/sec)
 ```
@@ -108,7 +109,7 @@ semantics) — it won't turn the light off. Use `light.turn_off` for that.
 
 ```yaml
 service: dynamic_dimming.stop
-data:
+target:
   entity_id: light.living_room
 ```
 
@@ -116,8 +117,9 @@ data:
 
 ```yaml
 service: dynamic_dimming.step
-data:
+target:
   entity_id: light.living_room
+data:
   direction: up        # up | down
   step_pct: 5          # optional, default 5 (% of perceptual travel)
 ```
@@ -126,8 +128,9 @@ data:
 
 ```yaml
 service: dynamic_dimming.fade
-data:
+target:
   entity_id: light.living_room
+data:
   brightness_pct: 40   # 0-100
   duration: 3          # seconds, 0.1-120
   color_temp_kelvin: 2700   # optional; asserted from the first write, not faded
@@ -140,6 +143,11 @@ back to simulation, which writes absolute values and so always lands on target.
 
 Every service except `stop` also takes an optional `curve`, and a `backend`
 override (`auto`, `native`, `simulated`).
+
+All four take a standard Home Assistant target, so one call can name one light,
+a list of them, or an area — each entity is routed and tracked separately, and
+`stop` on one light leaves the others moving. `entity_id` under `data:` still
+works for callers that write it that way.
 
 A typical hold-to-dim binding calls `move` on button-hold and `stop` on
 button-release.
