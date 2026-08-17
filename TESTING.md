@@ -75,13 +75,24 @@ The Matter entry classifies as native too, but over a websocket this integration
 | M4 | Release the button, then check the HA state | Brightness converges on its own within a second or so — the device reports `CurrentLevel` and the Matter integration's subscription carries it back. There is no resync call to look for |
 | M5 | `fade` to an absolute level over 5 s, with and without `color_temp_kelvin` | One `MoveToLevelWithOnOff` carrying `transitionTime`, preceded by a zero-transition `MoveToColorTemperature` when a color was asked for; the device runs the whole ramp |
 | M6 | Stop the Matter server add-on, then hold to dim | Nothing moves and one warning is logged — not one per press. Restart the add-on and hold again: it reconnects without reloading the integration |
-| M7 | Disable the Matter integration, then hold to dim a Matter light | Falls back to stepped simulation through `light.turn_on` rather than going dead |
+| M7 | Restart Home Assistant with the Matter **server** unreachable but the config entry still present, then hold to dim | The entity is unavailable, so `move` is dropped at the capability gate with a debug line and no traceback. Nothing hangs and nothing warns per press |
+| M8 | With Matter healthy, `move` with `backend: simulated` on the same light | The 20 Hz `light.turn_on` path drives it instead. This is the fallback `claims()` guards, and the only way to exercise it deliberately |
+
+**M7 replaces an earlier version that expected the wrong thing.** It used to read "disable the Matter integration, then hold to dim — falls back to stepped simulation." That cannot happen. Disabling the integration takes its entities with it: the entity goes unavailable, `classify` finds no `supported_color_modes`, returns `UNSUPPORTED`, and `move` is dropped before any backend is consulted. There is nothing left for simulation to drive.
+
+The fallback `claims()` actually guards is narrower — Matter's *registry entries* outliving the loaded integration, which is a startup-ordering window rather than a state a user can sit in. M7 as rewritten covers the reachable half of that (unavailable entity, no crash), and M8 covers the simulation path the honest way, through the `backend` override.
 
 #### Results — 2026-08-16, CA House
 
 Run against **Stairs sconce bulb** (`light.mv_str_sconces`, Leedarson RGBTW, node 18 / endpoint 1) on **matter-server 1.4.0 (matter.js 0.17.9), schema 13**.
 
-The protocol half was driven by a stdlib websocket client run from the SSH add-on, sending byte-for-byte the payloads the backend emits. That reaches `core-matter-server:5580`, which only resolves inside the box, and needs no deploy and no restart — so M1, M2, M3 and M5 could be confirmed against real hardware before the integration shipped anywhere.
+**Method, in two passes.** Worth repeating for any future backend, because the first pass costs nothing and catches the expensive class of bug.
+
+*Pass 1 — protocol only, nothing installed.* A stdlib websocket client run from the SSH add-on, sending byte-for-byte the payloads the backend emits. `core-matter-server:5580` only resolves inside the box, so this has to run there, but it needs no deploy and no restart. M1, M2, M3 and M5 were confirmed against real hardware before the integration shipped anywhere — and this is the pass that found the `Step` defect.
+
+*Pass 2 — through the integration.* v0.6.1 installed to `/config/custom_components`, HA restarted, then the real services driven over the websocket API. This is the only pass that can answer M4, because state convergence is a property of the integration, not the protocol.
+
+Two practical notes for anyone repeating this. Read the target's `unique_id` out of the entity registry first (`config/entity_registry/get`) and check your address parser against it — that one string is the whole addressing scheme, and a format mismatch means silent degradation to simulation rather than an error. And drive the services with `entity_id` as a plain **string**; a list is rejected (see the defect note below).
 
 | # | Result |
 |---|---|
@@ -113,9 +124,9 @@ v0.6.1 installed to `/config/custom_components` and HA restarted (2026.8.2). The
 | Step | **Pass** through the deployed service: 255 → 230 |
 | Fade | **Pass** through the deployed service: gradual (238 mid-fade), landed on 255 |
 
-**M6 and M7 remain unrun.** M6 needs the Matter server stopped, which takes all 96 Matter entities at this house — kitchen pendants included — offline for the duration; M7 needs the Matter integration disabled, with the same reach. Both want a deliberate maintenance window.
+**M6, M7 and M8 remain unrun.** M6 and M7 both need the Matter server stopped, which takes all 96 Matter entities at this house — kitchen pendants included — offline for the duration, so they want a deliberate maintenance window. M8 is cheap and should be folded into the next pass.
 
-One caveat on M7's expected outcome as written above. Disabling the Matter integration does not leave a working entity for simulation to drive: the entity goes unavailable, `classify` sees no `supported_color_modes` and returns `UNSUPPORTED`, and `move` is dropped before any backend is consulted. The simulation fallback that `claims()` guards is the narrower case where Matter's *registry entries* outlive the loaded integration. Worth rewriting M7 around that before running it.
+M7's premise was found wrong by reading `capability.classify` while planning the run, not by running it — the table above carries the corrected version and the reasoning. It is still unverified either way.
 
 #### Unrelated defect surfaced by this run
 
@@ -124,3 +135,90 @@ Driving the services through a generic client failed with `invalid_format - valu
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
+
+## Proposal: let other people run this without reading this document
+
+*Not built yet — a design, written down while the Matter run was fresh.*
+
+Everything above assumes the tester is the author: SSH to the box, a hand-written websocket client, `docker stop` on an add-on. Nobody testing a Z-Wave dimmer for the first time is going to do that, and the reports that matter most come from hardware nobody here owns. Three pieces, in increasing order of effort, each useful alone.
+
+### 1. `diagnostics.py` — the support bundle, for free
+
+Home Assistant already has this: implement `async_get_config_entry_diagnostics` and a **Download diagnostics** button appears on the integration's page. No UI to build, no new service, and users already know the button from filing bugs against core integrations.
+
+What it should dump, per light entity:
+
+```
+entity_id, platform, classification (NATIVE/SIMULATED/UNSUPPORTED),
+claiming_backend, supported_color_modes, supported_features, brightness
+```
+
+plus, per backend, *why* an entity resolved or did not. That last part is the whole value. Today `claims()` returns a bare `False` and the user has no way to learn whether their Z-Wave dimmer was skipped because the service was missing, the platform did not match, or the `unique_id` carried no value id. Each backend should be able to answer "not mine, because —" in one string:
+
+| Backend | Reports |
+|---|---|
+| Matter | node id, endpoint id, whether the config entry had a URL, whether the `unique_id` parsed |
+| Z-Wave JS | whether `zwave_js.invoke_cc_api` is registered, whether the `unique_id` carries a value id |
+| ZHA | whether `zha.issue_zigbee_cluster_command` is registered, IEEE found, endpoint parsed |
+| Zigbee2MQTT | whether MQTT is loaded, whether a `zigbee2mqtt_` identifier was found |
+| Tasmota | whether the discovery topic yielded a command prefix |
+| WiZ | whether a host resolved; for a group, which member broke the all-or-nothing rule |
+
+Redact addresses through `homeassistant.components.diagnostics.async_redact_data` — IEEE, IP, node id are all identifying.
+
+### 2. `dynamic_dimming.diagnose` — run the protocol for them
+
+A service taking one `entity_id` that performs the per-device protocol automatically and records what happened, rather than asking a human to eyeball it:
+
+1. sample `brightness` every 100 ms throughout
+2. `move` up 2 s → `stop` → settle 2 s
+3. `move` down to the rail → confirm it floors above zero and stays on
+4. `step` down, `step` up
+5. `fade` to 50% over 3 s
+6. return the light to where it started
+
+Then score it against the same things the M-table checks by hand: did it move, did `stop` hold, did it floor above zero without switching off, did HA's state converge without a resync, was the ramp continuous or visibly stepped. Output a verdict plus the raw `(t, brightness)` trace.
+
+This is also the honest way to measure the thing the whole project rests on — command count. A native backend should produce two commands per gesture and simulation forty; the trace shows which happened without anyone reading broker logs.
+
+Emit the result as a persistent notification (so it is visible immediately) and write the full JSON next to the config so it can be attached.
+
+### 3. The pre-filled report link
+
+The notification ends with a link that opens the device report with the machine-knowable parts already filled.
+
+**The constraint that shapes this:** GitHub issue-form prefill works for `input` and `textarea` fields only. `dropdown` and `checkboxes` are *not* prefillable ([community #5288](https://github.com/orgs/community/discussions/5288), [#32200](https://github.com/orgs/community/discussions/32200)) — and today's form uses a dropdown for `integration`, a dropdown for `result`, and checkboxes for `tried`. So "every field pre-filled" is not reachable with the form as written. Two changes make it reachable:
+
+- Turn `integration` into an `input`. The backend knows the platform exactly; a dropdown only invites the user to get it wrong.
+- Drop the `tried` checkboxes. `diagnose` tried *all* of them, and the trace says so more reliably than a human ticking boxes.
+
+Keep `result` a dropdown. That one is a judgment call — "looked smooth to me" is information the trace does not carry, and it is the one thing worth making a person answer.
+
+Add one `textarea` with id `diagnostics` for the generated block, and the URL becomes:
+
+```
+https://github.com/nohat/dynamic_dimming/issues/new
+  ?template=device-report.yml
+  &title=%5Bdevice%5D+Inovelli+LZW31-SN+%28Z-Wave+JS%29
+  &integration=Z-Wave+JS
+  &device=Inovelli+LZW31-SN
+  &ha_version=2026.8.2
+  &diagnostics=<urlencoded block>
+```
+
+with the block itself compact and readable, something like:
+
+```yaml
+dynamic_dimming: 0.6.1        home_assistant: 2026.8.2
+entity: light.hall            platform: zwave_js
+classification: NATIVE        backend: ZwaveJsBackend
+verdict: moved=yes stop=held floor=1(on) converged=yes commands=2
+trace: 100,118,141,167,196,228,254,254,254
+notes: rate profile "medium" -> duration 3s (full-scale sweep)
+```
+
+Mind the length: GitHub answers `414 URI Too Long` past a few kilobytes, so the trace has to be decimated (every Nth sample, or just the inflection points) and the full JSON left as a manual attachment. The link carries enough to triage; the diagnostics download carries enough to debug.
+
+### Why this order
+
+Piece 1 alone would have shortened the Matter work — "why didn't it claim my light" is the first question every new backend raises, and it is currently unanswerable without a debugger. Piece 2 is what makes a report comparable across houses. Piece 3 is polish, and it is worth doing only after 1 and 2 exist, because a pre-filled link to a report with nothing in it is just a shorter way to file a vague issue.
