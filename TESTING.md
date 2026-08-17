@@ -77,6 +77,33 @@ The Matter entry classifies as native too, but over a websocket this integration
 | M6 | Stop the Matter server add-on, then hold to dim | Nothing moves and one warning is logged — not one per press. Restart the add-on and hold again: it reconnects without reloading the integration |
 | M7 | Disable the Matter integration, then hold to dim a Matter light | Falls back to stepped simulation through `light.turn_on` rather than going dead |
 
+#### Results — 2026-08-16, CA House
+
+Run against **Stairs sconce bulb** (`light.mv_str_sconces`, Leedarson RGBTW, node 18 / endpoint 1) on **matter-server 1.4.0 (matter.js 0.17.9), schema 13**.
+
+The protocol half was driven by a stdlib websocket client run from the SSH add-on, sending byte-for-byte the payloads the backend emits. That reaches `core-matter-server:5580`, which only resolves inside the box, and needs no deploy and no restart — so M1, M2, M3 and M5 could be confirmed against real hardware before the integration shipped anywhere.
+
+| # | Result |
+|---|---|
+| M1 | **Pass.** Two commands per gesture. Level 40 → 133 after 1 s of `Move` (rate 90), 227 at `Stop`, still 227 two seconds later — the device ramped on its own and `Stop` held it |
+| M2 | **Pass.** `Move` down to the rail floors at level **1** with `OnOff` still true; never switched off |
+| M3 | **Pass.** `Move` up on an off light is accepted by the server and does nothing — level unchanged, light stays off. ExecuteIfOff clear behaves as the spec says |
+| M5 | **Pass.** `MoveToColorTemperature` (370 mireds, ExecuteIfOff) then one `MoveToLevelWithOnOff(level=254, transitionTime=30)`; mid-fade 171, landed exactly on 254 in ~3 s |
+| Step | **Failed, then fixed.** See below |
+
+**The one real defect, and it only shows on hardware.** `transitionTime` is a *mandatory* field that happens to be nullable. Omitting the key relies on the server filling the default in — which python-matter-server does and **matter.js does not**: it answers `ValidationMandatoryFieldMissingError` and the step never reaches the device. A fake-server unit test could not have caught this, because the fake accepted whatever it was handed. Probing the four variants against the real server settled it:
+
+| `transitionTime` | Server | Device |
+|---|---|---|
+| omitted | rejected | no change |
+| `null` | accepted | level 100 → 113 |
+| `0` | accepted | level 100 → 113 |
+| `10` | accepted | level 100 → 113 |
+
+Fixed in v0.6.1 by sending an explicit `null`, which both server implementations accept and which is the spec's way of saying "use the device's own `OnOffTransitionTime`". Re-ran the suite afterwards: **13/13**.
+
+**Still unverified.** M4, M6 and M7 exercise the backend running inside Home Assistant — state convergence, reconnect after a server bounce, and the fallback to simulation when Matter is unloaded. They need v0.6.1 deployed to `/config/custom_components` and a core restart, which this pass did not do.
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
