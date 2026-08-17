@@ -22,8 +22,10 @@ Options handling, so that a Move on a light that is *off* does nothing. Turn it
 on first. Rates are level units per second on the same 0-254 scale the shared
 rate profiles use, so they pass straight through.
 
-Nothing goes stale here: the device reports its own ``CurrentLevel`` and ZHA's
-attribute subscription feeds that back into the state machine.
+Brightness does not go stale: the device reports its own ``CurrentLevel`` and
+ZHA's attribute subscription feeds that back into the state machine. Color is a
+different story, and ``async_fade`` says why — ZHA subscribes to both, but on
+very different terms.
 """
 
 from __future__ import annotations
@@ -301,6 +303,26 @@ class ZhaBackend(DimmingBackend):
         ordering — but not an unbounded one, and not a failure. A device that
         does not answer, or has no Color Control cluster to answer with, costs
         the fade its color and nothing else; the ramp still goes out.
+
+        What the color command does *not* do is update Home Assistant. Level and
+        color both come back by attribute report, but ZHA subscribes to them on
+        very different terms: ``current_level`` is configured ASAP, a one-second
+        minimum interval, so brightness catches up within a second or two.
+        ``color_temperature`` is configured with the default profile — a
+        **thirty-second** minimum and a fifteen-minute maximum — and hardware
+        that never binds the report at all is common enough that a whole
+        campaign can pass without seeing one. So for a window measured in tens
+        of seconds, and sometimes until something forces a read, the device is
+        at the new white while ``color_temp_kelvin`` still reads the old one.
+        The light looks right; an automation reading the attribute back does
+        not. Anything that needs the value promptly should
+        ``homeassistant.update_entity`` after the fade.
+
+        Note also that ``level`` is clamped to at least 1 and this is the
+        ``WithOnOff`` variant, so what a fade to zero percent *means* is the
+        device's to decide: bulbs that treat level 1 as off will switch off,
+        and bulbs that treat it as their dimmest on-level will stay lit. Use
+        ``light.turn_off`` when off is what is actually wanted.
         """
         target = self._target(entity_id)
         if target is None:

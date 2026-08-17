@@ -45,7 +45,7 @@ After P10: file a device report via the repo's report form with the results.
 | S1 | Pull power on a device mid-`move` | Job cancels when the entity goes unavailable; no error spam in the log |
 | S2 | Restart Home Assistant mid-`move` | Clean restart; no orphaned job, no startup errors from the integration |
 | S3 | `move` on a light group entity | All members ramp; record how far they drift out of sync |
-| S4 | `move` on a light Adaptive Lighting manages, while AL is active | Record who wins — does AL snap the level back during or after the move? This is the most likely real-world conflict |
+| S4 | `move` on a light Adaptive Lighting manages, while AL is active | Record who wins — does AL snap the level back during or after the move? This is the most likely real-world conflict. **Measured on the CA instance, 2026-08-16:** AL wins. Configured `interval: 90`, `transition: 45`, it re-applied `move_to_level_with_on_off(level=2)` about four seconds into a fade and overwrote it. Worse for testing, **turning the light off clears AL's `manual_control` claim** — so claiming manual control before a gesture does not survive an off/on cycle, and AL resumes the moment the light comes back on. Disable the AL switch outright for any run that cycles the light, or results are contaminated |
 | S5 | `move` on a Lightener-wrapped entity, then on its underlying light | Record whether the curve mapping distorts the ramp |
 | S6 | Two simultaneous moves, different lights, different rates | Independent jobs; neither starves the other |
 | S7 | Watch Zigbee2MQTT logs during a `fast` move on a Zigbee light | Command rate on the mesh, any timeouts or retries — this is the mesh-flooding measurement the simulation-vs-native argument rests on |
@@ -169,6 +169,69 @@ Fleet entry for this pass: the **dining room pendant** (CA instance).
 S7's mesh-rate measurement now has a third arm: run Z3 against the Z2M entry's
 N1 and the same light under `backend: simulated`, and compare frame counts for
 an identical gesture.
+
+#### ZHA campaign results — 2026-08-16
+
+First hardware run of the ZHA backend, on the CA instance. Home Assistant
+2026.8.2, **zigpy 2.1.0**, EZSP coordinator. Pendant: Signify **LTA010** White
+Ambiance, unquirked, IEEE `00:17:88:01:0b:20:91:df`, **endpoint 11**, entity
+`light.dining_nook_pendant`.
+
+**Ten of sixteen passed. Nothing failed.** Two were skipped for want of hardware
+and two were not run for want of approval.
+
+| Steps | Outcome |
+|---|---|
+| Z1–Z11, Z13 | **pass** (Z13 with a caveat, below) |
+| Z12, Z15 | **skipped** — the fleet has no ZHA light without a Color Control cluster, and no ZHA group light |
+| Z14, Z16 | **not run** — approval withheld |
+
+What the run converted from assumption to fact, all of it previously mocked:
+
+- The **zigpy parameter names are right**. `move(move_mode=MoveMode.Up, rate=90)`
+  came back `DefaultResponse(command_id=1, status=SUCCESS)`; ZHA's coercion layer
+  logged `Converted ZCL schema field(move_mode)`. No schema complaint anywhere in
+  2922 log lines. Confirmed against zigpy 2.1.0 — the version the names were read
+  from — so the contract holds, not its version-independence.
+- **`Stop` is accepted with an empty `params` dict.** zigpy fills the optional
+  fields, which is what keeps ExecuteIfOff clear.
+- **Address parsing works**, and did real work: the endpoint was **11**, not 1,
+  so a default would not have matched. All 58 frames targeted `[0x571C:11:…]`.
+- **Two frames per gesture**, no `move_to_level` stream. The premise holds.
+- **Rate is honored to the unit**: commanded 90, measured 128 → 218 in 1.0 s.
+- **`fade` transition time in tenths**: 5 s → `transition_time=50`. With a color,
+  `move_to_color_temp` landed 108–112 ms ahead of the level command with
+  ExecuteIfOff on both mask and override, and a fade up from off arrived at
+  6493 K rather than the stale 2202 K.
+- **Z7 is the trade it is documented to be, not a dropped frame.** The `move` was
+  delivered and ACKed `SUCCESS` while the off light stayed off. Worth knowing that
+  a silent failure and a spec-correct refusal are indistinguishable from entity
+  state alone — only the ACK separates them.
+
+Three things to carry forward:
+
+- **Z13's "within a second or so" is accurate on average and optimistic at the
+  tail.** Convergence was typically 1–2 s, but one release sat stale for a full
+  10 s. The bound is the device's own reporting cadence, not anything the backend
+  does.
+- **Color temperature does not converge on the same terms.** No Color Control
+  attribute reports arrived during the entire campaign; HA kept reporting 2202 K
+  while the bulb sat at 6493 K until an explicit read. ZHA configures
+  `color_temperature` with a thirty-second minimum interval against
+  `current_level`'s one second, and hardware that never binds the report at all
+  is common. See `async_fade`'s docstring.
+- **`move_to_level_with_on_off(level=1)` switched this bulb off.** Which is the
+  argument for the backend's central choice: it is *because* the `WithOnOff`
+  variant extinguishes at level 1 that Z6's plain-`Move` floor landing on level 1
+  and staying lit is a real result rather than luck. The corollary is that a
+  `fade` to zero percent means whatever the device decides.
+
+**Z16 remains the consequential gap.** `_command` passes no context on the
+reasoning that a fresh context carries no user id and so clears the admin check
+on `issue_zigbee_cluster_command`. That is sound on paper and entirely
+unexercised. If it is wrong, the backend does not work from user-owned
+automations — the main way anyone would drive hold-to-dim. Z12, Z14 and Z15 also
+remain untested on hardware.
 
 ## Recording results
 
