@@ -15,6 +15,7 @@ Reference numbers, so observations map to the implementation: the simulation tic
 | Zigbee2MQTT | Gledopto USB Mini LED Controller RGB+CCT |
 | ZHA | Dining room pendant (CA instance) |
 | Matter | Leedarson Smart RGBTW bulb |
+| Matter | Orein bulb (second vendor — see the second-device pass) |
 | WiZ (local UDP) | HALO HLB6099WZRGBWMWR wafer downlight ×2 |
 | Tuya (cloud) | Tuya LED BULB W509Z1 |
 | group | Home Assistant light group |
@@ -128,6 +129,49 @@ v0.6.1 installed to `/config/custom_components` and HA restarted (2026.8.2). The
 **M6, M7 and M8 remain unrun.** M6 and M7 both need the Matter server stopped, which takes all 96 Matter entities at this house — kitchen pendants included — offline for the duration, so they want a deliberate maintenance window. M8 is cheap and should be folded into the next pass.
 
 M7's premise was found wrong by reading `capability.classify` while planning the run, not by running it — the table above carries the corrected version and the reasoning. It is still unverified either way.
+
+#### Second Matter device — the Orein bulb
+
+The backend is no longer what is under test. The Leedarson run settled the
+protocol, the addressing and the integration path, and the one real defect it
+found is fixed. What a second vendor's bulb tests is **how much of that was the
+Leedarson's behavior rather than Matter's** — every result above that came from
+the device rather than the server is, until now, a sample of one.
+
+So this pass is not a repeat. Run the standard per-device protocol P1–P10 and
+N1–N3 for the device report, and add the table below. **One pass, through the
+deployed integration** — the protocol-only client was worth building when the
+backend was unproven, and is now only worth reaching for if something here looks
+wrong and you need to separate device from integration.
+
+Record before anything else: **model number, and whether it joined over Thread or
+Wi-Fi.** Most inexpensive Matter bulbs are Wi-Fi, and the whole
+one-command-instead-of-forty argument is worth far more on Thread than on Wi-Fi.
+If both fleet bulbs turn out to be Wi-Fi, the mesh claim is still untested on
+Matter, and that should be said plainly rather than assumed from the Zigbee runs.
+
+| # | Step | Expected — and what varies by device |
+|---|---|---|
+| O1 | Record model, transport (Thread / Wi-Fi), node and endpoint, entity `unique_id`, and color capability | The `unique_id` is the whole addressing scheme. Check it against `parse_unique_id` before anything else: a format mismatch degrades to simulation silently rather than erroring |
+| O2 | M2 — `move` down to the rail | **The most device-variable result in the suite.** The Leedarson floors at level 1 and stays lit. Record the exact landing level and whether it stays on. A ZHA bulb in this same fleet switches itself off at level 1 under `WithOnOff`, so "floors and stays lit" is a property of the device and the command variant together, not a guarantee |
+| O3 | M3 — `move` up while off | Nothing happens. Spec-defined, but ExecuteIfOff handling is exactly the kind of thing vendors get wrong. If this bulb *does* ramp from off, that is a finding worth writing up |
+| O4 | M1 — hold-to-dim, server log at debug | Two `device_command` calls per gesture. Then measure the rate the way the Leedarson was measured: sample the level one second into a `rate: 90` move and check it against `start + 90`. Record whether the device honors the commanded rate, clamps it, or ignores it |
+| O5 | `step` up and down | The v0.6.1 fix sends `transitionTime` as an explicit `null`, which means "use the device's own `OnOffTransitionTime`". That attribute is the vendor's choice, so the step may look instant on one bulb and glide on another. Record which, and the step size actually applied |
+| O6 | M5 — `fade` over 5 s, with and without `color_temp_kelvin` | One `MoveToLevelWithOnOff` carrying `transitionTime` in tenths, preceded by a zero-transition `MoveToColorTemperature` when a color was asked for. Check the landing level is exact, and note the mireds actually accepted — a CCT-only bulb has a narrower range than the RGBTW, and the backend clamps rather than rejects |
+| O7 | **New: does HA's `color_temp_kelvin` follow the fade?** After O6's colored fade, read the entity's `color_temp_kelvin` back and compare against the device | Imported from the ZHA campaign, which found the answer is *no* on that path — the fixture went to the right white while HA reported the previous value for tens of seconds, because color is subscribed on far slower terms than brightness. Matter's subscription model is not Zigbee's attribute reporting, so this may well be fine here. **It has never been checked**, and M5 only ever verified the wire and the level |
+| O8 | M4 — release a hold, watch state converge | Record the typical time **and the worst case**. The Leedarson settled the instant `stop` landed. The ZHA run measured 1–2 s typical with a 10 s tail, so sample repeatedly rather than once — a single fast observation says nothing about the tail |
+| O9 | M8 — `move` with `backend: simulated` | The 20 Hz `light.turn_on` path drives it instead. Cheap, still unrun on any device, and this is the pass to fold it into |
+| O10 | Two Matter lights moving at once, this bulb and the Leedarson, different rates | Independent jobs, neither starving the other, and both ramps smooth. This is S6 on the transport where it matters — two devices sharing one websocket and one fabric |
+
+**M6 and M7 stay out of this pass.** Both need the Matter server stopped, which
+takes all 96 Matter entities at the CA house offline, so they want a deliberate
+maintenance window rather than a ride-along. They are unfinished business from the
+Leedarson run and remain so.
+
+Two carried-over cautions. Drive the services with `entity_id` as a plain
+**string**, not a list — see the defect note below. And if this bulb shares an
+Adaptive Lighting switch with anything, disable that switch outright for the
+duration: S4 records why claiming manual control is not enough.
 
 #### Unrelated defect surfaced by this run
 
