@@ -100,6 +100,24 @@ ZWAVE_METHOD_STOP_LEVEL_CHANGE = "stopLevelChange"
 ZWAVE_MIN_DURATION_SECONDS = 1
 ZWAVE_MAX_DURATION_SECONDS = 127
 
+# Hue (CLIP API v2)
+HUE_DOMAIN = "hue"
+HUE_API_V2 = 2
+# The two CLIP resource types that answer dimming_delta. A HA hue light
+# entity's unique_id is the resource's UUID; which of the two it names decides
+# the path it is driven at.
+HUE_RESOURCE_LIGHT = "light"
+HUE_RESOURCE_GROUPED_LIGHT = "grouped_light"
+HUE_ACTION_UP = "up"
+HUE_ACTION_DOWN = "down"
+HUE_ACTION_STOP = "stop"
+# dimming_delta's brightness_delta and dimming's brightness are percent of
+# full scale.
+HUE_MAX_BRIGHTNESS_PCT = 100.0
+# CLIP v2 carries color temperature in mireds, clamped to this range.
+HUE_MIN_MIREK = 153
+HUE_MAX_MIREK = 500
+
 # WiZ
 WIZ_DOMAIN = "wiz"
 WIZ_PORT = 38899
