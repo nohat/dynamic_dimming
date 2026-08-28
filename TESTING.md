@@ -190,6 +190,27 @@ invalidate the backend; run them first.**
 | H7 | On a password-protected device, repeat H3 | The digest challenge is answered from the config entry's credentials; one 401 then success. A repeated 401 means the SHA-256 digest path failed — capture the `WWW-Authenticate` header |
 | H8 | Watch HA's state during a hold | Brightness follows the ramp with no resync call — the device notifies the Shelly integration's websocket on its own |
 
+### Hue addendum
+
+The Hue backend rides the loaded config entry's aiohue client rather than a
+transport of its own, so its risks are the CLIP v2 payloads and the resource
+addressing — none of which has run against a real bridge. The payload field
+names were read out of the published CLIP v2 schema, not sent. The fleet
+currently has no Hue bridge, so this whole table is open. **U2 and U6 are the
+steps that could invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| U1 | Pre-flight. From the entity registry record a Hue light's `unique_id` and the config entry's `api_version` | The `unique_id` should be the CLIP resource UUID itself — that one string is the whole addressing scheme. A v1-era id means the entity predates the v2 migration; **stop and report it** |
+| U2 | `move` up with `backend: native`, watching the bridge's response | One PUT of `dimming_delta {action: up}` with a `dynamics` duration, HTTP 200. A 400 naming a field is a schema mismatch — capture the CLIP error body |
+| U3 | Press-and-release hold | Exactly two PUTs per gesture; the ramp is visibly the bridge's own, and HA's state follows it live off the event stream with no resync call |
+| U4 | `move` down and let it run out | Clips at the light's **minimum dim level** and stays lit. Record the landing brightness — the stays-on floor here is the bridge's, not ours |
+| U5 | Compare `rate: slow` / `medium` / `fast` from ~50% | Sweep times near 3.2 s / 1.4 s / 0.8 s to the top rail — duration is computed from distance at the profile rate, so a stale HA brightness shows up here as a wrong sweep time at the right destination |
+| U6 | `fade` to 50% over 5 s, then `stop` mid-fade | The fade is one `dimming` + `dynamics` PUT. The stop sends `dimming_delta {action: stop}`, and whether that halts a plain `dimming` transition (rather than only a delta one) is **unverified** — record what happens |
+| U7 | `move` on a Hue **room or zone** entity | Claimed and ramped as one `grouped_light` PUT — every member in step. Compare against a HA light group of the same bulbs under simulation |
+| U8 | `move` up on a Hue light that is **off** | Record what the bridge does — `dimming_delta` makes no on/off promise, and the off-light contract on this backend is whatever the bridge answers |
+| U9 | Two holds in quick succession on different Hue lights | Both ramp; watch for 429s in the log. The whole point of this backend is staying under the bridge's documented ~10 req/s comfort zone |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
