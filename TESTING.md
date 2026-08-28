@@ -170,6 +170,29 @@ S7's mesh-rate measurement now has a third arm: run Z3 against the Z2M entry's
 N1 and the same light under `backend: simulated`, and compare frame counts for
 an identical gesture.
 
+### deCONZ addendum
+
+Like ZHA, the deCONZ backend drives another integration's public service —
+`deconz.configure` — so the risks are that contract and the REST payloads, none
+of which has run against a real gateway. `bri_inc` with a `transitiontime` and
+the `bri_inc: 0` stop are the Hue v1 idiom the deCONZ REST docs describe for
+hold-to-dim, but the fleet currently has no deCONZ gateway, so this whole table
+is open. **D2 and D3 are the steps that could invalidate the backend; run them
+first.**
+
+| # | Step | Expected |
+|---|---|---|
+| D1 | Pre-flight. Record the light's `unique_id` and the config entry's `unique_id` (the bridge id) | An individual light's `unique_id` should lead with its 8-group Zigbee serial (seven colons); a group's should read `<bridgeid>-/groups/<n>`. Anything else, **stop and report it** — the field routing (`/state` vs `/action`) hangs off those two shapes |
+| D2 | `move` up with `backend: native`, deCONZ REST log at debug | One PUT of `{"bri_inc": <distance>, "transitiontime": <tenths>}` to `/lights/<id>/state`, accepted. An error naming `bri_inc` invalidates the backend — capture the response |
+| D3 | Press-and-release hold | Exactly two PUTs per gesture — the increment on press, `bri_inc: 0` on release — and the level holds where it was, no snap to the original target |
+| D4 | `move` down and let it run out | Lands at bri 1 and **stays lit** — the increment aims one unit above zero rather than at it |
+| D5 | Release a hold, then watch the HA state | Brightness converges on its own off the deCONZ websocket stream; there is no resync call to look for |
+| D6 | `step` up 5%, `step` down 5% | Two discrete nudges with `transitiontime: 0` — compare against the Z2M and ZHA entries; three gateways to the same silicon should feel identical |
+| D7 | `fade` to 50% over 5 s, with and without `color_temp_kelvin` | One `{"on": true, "bri": ..., "transitiontime": 50}` write, preceded by a zero-transition `ct` write when a color was asked for. The docs hint `transitiontime` is ignored *for the `on` change itself*; confirm the bri ramp still glides when `on` rides along — if it snaps, the fade needs the `on` split out |
+| D8 | `move` on a deCONZ **group** entity | Claimed, and the PUT lands under `/action` — the whole group ramps as one Zigbee group cast. Record member drift against the same bulbs as a HA light group under simulation |
+| D9 | Two gateways, if the house ever has them | Every call carries the entity's own `bridgeid`; a light on the non-master gateway must still move |
+| D10 | `move` up on a deCONZ light that is **off** | Record what the gateway does — `bri_inc` makes no on/off promise, and the off-light contract here is whatever deCONZ answers |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.

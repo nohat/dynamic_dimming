@@ -100,6 +100,23 @@ ZWAVE_METHOD_STOP_LEVEL_CHANGE = "stopLevelChange"
 ZWAVE_MIN_DURATION_SECONDS = 1
 ZWAVE_MAX_DURATION_SECONDS = 127
 
+# deCONZ
+DECONZ_DOMAIN = "deconz"
+DECONZ_SERVICE_CONFIGURE = "configure"
+DECONZ_CONF_BRIDGE_ID = "bridgeid"
+# The REST sub-path the configure service appends to the entity's resource:
+# individual lights carry their dimmable state under /state, groups under
+# /action.
+DECONZ_FIELD_STATE = "/state"
+DECONZ_FIELD_ACTION = "/action"
+# bri runs 0-255 on the REST API; bri_inc is clamped to ±254 and 0 means
+# "stop the transition in place" — the Hue v1 idiom deCONZ inherited.
+DECONZ_MAX_BRI = 255
+DECONZ_MIN_BRI = 1
+DECONZ_MAX_BRI_INC = 254
+# transitiontime is tenths of a second in a uint16.
+DECONZ_MAX_TRANSITION_TENTHS = 65535
+
 # WiZ
 WIZ_DOMAIN = "wiz"
 WIZ_PORT = 38899
