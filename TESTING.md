@@ -170,6 +170,26 @@ S7's mesh-rate measurement now has a third arm: run Z3 against the Z2M entry's
 N1 and the same light under `backend: simulated`, and compare frame counts for
 an identical gesture.
 
+### Shelly addendum
+
+The Shelly backend owns its transport — one HTTP POST to the device's `/rpc`
+endpoint per command — so its risks are the RPC contract, none of which has run
+against real hardware: the method and parameter names were read out of the
+Gen2+ API documentation, not sent. The fleet currently has no Gen2+ Shelly
+light, so this whole table is open. **H2 and H4 are the steps that could
+invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| H1 | Pre-flight. From the entity registry record the light's `unique_id`; from the config entry note `gen`, host, and whether a password is set | The backend takes everything from those two places. If the `unique_id` is not `<MAC>-light:<n>` (or `cct:`/`rgb:`/`rgbw:`/`rgbcct:`), **stop and report it** — address parsing is the piece with no live coverage |
+| H2 | `move` up with `backend: native`, watching the device's debug log or the HTTP response | One `Light.DimUp` POST, accepted. A 404 or a `-105` error names a contract mismatch — capture the response body |
+| H3 | Press-and-release hold | Exactly two POSTs per gesture — `DimUp` on press, `DimStop` on release — and the ramp is visibly the device's own |
+| H4 | `move` down and let it run out | Record where it lands and whether the light **stays on**. The DimDown floor is firmware behavior this backend inherits and has never observed |
+| H5 | Compare `rate: slow` / `medium` / `fast` | Three distinguishable sweep times (fade_rate classes 1/3/5). Record the actual seconds per class — the mapping's anchors are a guess the firmware gets to correct |
+| H6 | `fade` to 50% over 5 s, then `stop` mid-fade | One `Set` with `transition_duration: 5`; the stop is a `DimStop` and whether it halts a `Set` transition is **unverified** — record what happens |
+| H7 | On a password-protected device, repeat H3 | The digest challenge is answered from the config entry's credentials; one 401 then success. A repeated 401 means the SHA-256 digest path failed — capture the `WWW-Authenticate` header |
+| H8 | Watch HA's state during a hold | Brightness follows the ramp with no resync call — the device notifies the Shelly integration's websocket on its own |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.

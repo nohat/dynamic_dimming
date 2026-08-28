@@ -100,6 +100,32 @@ ZWAVE_METHOD_STOP_LEVEL_CHANGE = "stopLevelChange"
 ZWAVE_MIN_DURATION_SECONDS = 1
 ZWAVE_MAX_DURATION_SECONDS = 127
 
+# Shelly (Gen2+ RPC)
+SHELLY_DOMAIN = "shelly"
+SHELLY_DEFAULT_HTTP_PORT = 80
+# Config-entry data keys the Shelly integration stores (not exported by HA).
+SHELLY_CONF_GEN = "gen"
+SHELLY_CONF_SLEEP_PERIOD = "sleep_period"
+# The light-bearing RPC components all carry the same DimUp/DimDown/DimStop
+# triplet, keyed here by the component-key prefix Shelly writes into entity
+# unique_ids ("light:0", "cct:1", ...). "switch" is deliberately absent: a
+# relay exposed as a light has no brightness to move.
+SHELLY_DIM_COMPONENTS = {
+    "light": "Light",
+    "cct": "CCT",
+    "rgb": "RGB",
+    "rgbw": "RGBW",
+    "rgbcct": "RGBCCT",
+}
+# DimUp/DimDown carry no rate in units — fade_rate is a discrete speed class,
+# 1 slowest to 5 fastest, with the device's own config supplying the default.
+SHELLY_FADE_RATE_MIN = 1
+SHELLY_FADE_RATE_MAX = 5
+# Set's transition_duration is seconds; firmware accepts this range.
+SHELLY_MIN_TRANSITION_SECONDS = 0.5
+SHELLY_MAX_TRANSITION_SECONDS = 10800.0
+SHELLY_MAX_BRIGHTNESS_PCT = 100
+
 # WiZ
 WIZ_DOMAIN = "wiz"
 WIZ_PORT = 38899
