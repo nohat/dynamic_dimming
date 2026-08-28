@@ -11,6 +11,7 @@ from homeassistant.exceptions import ServiceValidationError
 from .backends.base import DimmingBackend
 from .backends.deconz import DeconzBackend
 from .backends.hue import HueBackend
+from .backends.lifx import LifxBackend
 from .backends.matter import MatterBackend
 from .backends.shelly import ShellyBackend
 from .backends.simulation import SimulationBackend
@@ -46,6 +47,7 @@ class DimmingController:
             ShellyBackend(hass),
             HueBackend(hass),
             DeconzBackend(hass),
+            LifxBackend(hass),
             WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}

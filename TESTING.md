@@ -234,6 +234,30 @@ first.**
 | D9 | Two gateways, if the house ever has them | Every call carries the entity's own `bridgeid`; a light on the non-master gateway must still move |
 | D10 | `move` up on a deCONZ light that is **off** | Record what the gateway does — `bri_inc` makes no on/off promise, and the off-light contract here is whatever deCONZ answers |
 
+### LIFX addendum
+
+The LIFX backend owns its transport like WiZ's — raw fire-and-forget UDP — but
+unlike WiZ the bulb runs the ramp, and unlike everything else the *release* is
+arithmetic: LIFX has no stop verb, so `stop` pins the level the started ramp
+must mathematically be at. That estimate is the backend's one novel idea and
+its one novel risk, and none of it has run against real hardware. The packet
+layouts were written from the published LAN protocol tables, not sent. **L2 and
+L3 are the steps that could invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| L1 | Pre-flight. Record the light's `unique_id` and the config entry's host | The `unique_id` should be the bulb's colon-separated serial (`d0:73:d5:…`) — its bytes are the packet's target field, so a different shape means silent degradation to simulation. **Stop and report it** if so |
+| L2 | `move` up with `backend: native`, packet capture or just eyes on the bulb | The bulb visibly ramps after exactly one datagram. Nothing moving means the header or HSBK packing is wrong — capture the 49-byte packet and compare against the protocol tables |
+| L3 | Hold ~2 s, release, then wait | The level holds where release caught it — the pin is a *computed* level, so a systematic overshoot or snap-back means the bulb's interpolation and our arithmetic disagree (measure the offset against hold time) |
+| L4 | `move` on a **color** (non-white) LIFX bulb, mid-saturation | The color must not shift during the ramp — every write carries the HSBK read from HA's state. A hue or saturation jump means the state-derived HSBK mapping is off |
+| L5 | `move` up, then immediately `move` down with no stop | The reversal starts from where the light visibly is (the active ramp's estimate), not from HA's stale brightness |
+| L6 | `move` down and let it run out | Floors at HA brightness 1 (bri16 257) and **stays lit**; brightness 0 on LIFX is dark-while-on, which the floor exists to avoid |
+| L7 | `move` up on a LIFX bulb that is **off** | Declined — nothing is sent and nothing lights. `SetColor` while off would rewrite the stored level invisibly, which is why this backend refuses rather than picking either Zigbee's or WiZ's off-light behavior |
+| L8 | Release a hold, then check HA state | Brightness matches the pinned level immediately — `stop` re-asserts it through `light.turn_on`, WiZ-style. Then let a ramp run out to the rail instead: HA converges only on the LIFX integration's next poll; record how long that takes |
+| L9 | `fade` to 50% over 5 s, with and without `color_temp_kelvin` | One interpolated `SetColor` (preceded by a zero-duration color assert when a kelvin was asked for); mid-fade `stop` pins by the same arithmetic as a move |
+| L10 | `fade` up from **off** | Color and target level land while dark, then `SetLightPower` fades in over the duration — LIFX's own fade-from-black idiom. A `stop` mid power-fade pins both color and power; record whether the light lands where the estimate says |
+| L11 | `step` up 5% | Routed through simulation: one acknowledged `light.turn_on`, HA state fresh, no UDP from this backend |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.

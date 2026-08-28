@@ -168,6 +168,26 @@ WIZ_PORT = 38899
 WIZ_MIN_DIMMING = 1
 WIZ_MAX_DIMMING = 100
 
+# LIFX (LAN protocol)
+LIFX_DOMAIN = "lifx"
+LIFX_PORT = 56700
+# Light-message packet types (lan.developer.lifx.com): SetColor carries a full
+# HSBK plus a duration the firmware interpolates over; SetLightPower carries a
+# level and the same kind of duration.
+LIFX_PKT_SET_COLOR = 102
+LIFX_PKT_SET_LIGHT_POWER = 117
+# HSBK components are uint16; kelvin is bounded by what LIFX firmware accepts.
+LIFX_MAX_BRI = 65535
+# HA brightness 1 on LIFX's 16-bit scale — the still-on floor a downward move
+# aims at, mirroring the brightness-1 floor the simulation uses.
+LIFX_MIN_BRI = 257
+LIFX_MIN_KELVIN = 1500
+LIFX_MAX_KELVIN = 9000
+# The kelvin a color has when saturation is full — firmware ignores it then,
+# but the field must still carry something sane.
+LIFX_DEFAULT_KELVIN = 3500
+LIFX_POWER_ON = 65535
+
 # Simulation tuning
 TICK_INTERVAL = timedelta(milliseconds=50)  # 20 Hz cap
 # Named rate profiles -> brightness units (0-255) per second.
