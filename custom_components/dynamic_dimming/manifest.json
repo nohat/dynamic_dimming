@@ -7,8 +7,12 @@
   "config_flow": true,
   "dependencies": [],
   "after_dependencies": [
+    "deconz",
+    "hue",
+    "lifx",
     "matter",
     "mqtt",
+    "shelly",
     "tasmota",
     "zha",
     "zwave_js"
@@ -19,5 +23,5 @@
   "issue_tracker": "https://github.com/nohat/dynamic_dimming/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.6.1"
+  "version": "0.7.0"
 }

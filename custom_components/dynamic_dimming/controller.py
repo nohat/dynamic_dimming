@@ -10,7 +10,11 @@ from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 
 from .backends.base import DimmingBackend
+from .backends.deconz import DeconzBackend
+from .backends.hue import HueBackend
+from .backends.lifx import LifxBackend
 from .backends.matter import MatterBackend
+from .backends.shelly import ShellyBackend
 from .backends.simulation import SimulationBackend
 from .backends.tasmota import TasmotaBackend
 from .backends.wiz import WizBackend
@@ -52,6 +56,10 @@ class DimmingController:
             MatterBackend(hass, entry),
             ZhaBackend(hass),
             ZwaveJsBackend(hass),
+            ShellyBackend(hass),
+            HueBackend(hass),
+            DeconzBackend(hass),
+            LifxBackend(hass),
             WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
@@ -100,6 +108,12 @@ class DimmingController:
         if unsub is not None:
             unsub()
 
+    async def _prepare_target(self, entity_id: str, target: DimmingBackend) -> None:
+        if target is self._simulation:
+            native = self._claimer(entity_id)
+            if native is not None:
+                await native.async_prepare_simulation(entity_id)
+
     async def async_move(
         self,
         entity_ids: str | Iterable[str],
@@ -128,6 +142,7 @@ class DimmingController:
         # Zigbee Level-cluster/Tasmota semantics, so the overlap when
         # superseding to simulation is at most one tick.
         self._cancel_job(entity_id)
+        await self._prepare_target(entity_id, target)
         unsub = await target.async_move(entity_id, direction, rate, curve)
         if unsub is not None:
             self._jobs[entity_id] = unsub
@@ -174,6 +189,7 @@ class DimmingController:
         if not target.supports_fade:
             target = self._simulation
         self._cancel_job(entity_id)
+        await self._prepare_target(entity_id, target)
         unsub = await target.async_fade(
             entity_id, target_brightness, duration, curve, color_temp_kelvin
         )
@@ -218,4 +234,6 @@ class DimmingController:
         # which costs the same single command a native step would have.
         if not target.supports_step:
             target = self._simulation
+        self._cancel_job(entity_id)
+        await self._prepare_target(entity_id, target)
         await target.async_step(entity_id, direction, step_pct, curve)

@@ -100,12 +100,93 @@ ZWAVE_METHOD_STOP_LEVEL_CHANGE = "stopLevelChange"
 ZWAVE_MIN_DURATION_SECONDS = 1
 ZWAVE_MAX_DURATION_SECONDS = 127
 
+# Shelly (Gen2+ RPC)
+SHELLY_DOMAIN = "shelly"
+SHELLY_DEFAULT_HTTP_PORT = 80
+# Config-entry data keys the Shelly integration stores (not exported by HA).
+SHELLY_CONF_GEN = "gen"
+SHELLY_CONF_SLEEP_PERIOD = "sleep_period"
+# The light-bearing RPC components all carry the same DimUp/DimDown/DimStop
+# triplet, keyed here by the component-key prefix Shelly writes into entity
+# unique_ids ("light:0", "cct:1", ...). "switch" is deliberately absent: a
+# relay exposed as a light has no brightness to move.
+SHELLY_DIM_COMPONENTS = {
+    "light": "Light",
+    "cct": "CCT",
+    "rgb": "RGB",
+    "rgbw": "RGBW",
+    "rgbcct": "RGBCCT",
+}
+# DimUp/DimDown carry no rate in units — fade_rate is a discrete speed class,
+# 1 slowest to 5 fastest, with the device's own config supplying the default.
+SHELLY_FADE_RATE_MIN = 1
+SHELLY_FADE_RATE_MAX = 5
+# Set's transition_duration is seconds; firmware accepts this range.
+SHELLY_MIN_TRANSITION_SECONDS = 0.5
+SHELLY_MAX_TRANSITION_SECONDS = 10800.0
+SHELLY_MAX_BRIGHTNESS_PCT = 100
+
+# Hue (CLIP API v2)
+HUE_DOMAIN = "hue"
+HUE_API_V2 = 2
+# The two CLIP resource types that answer dimming_delta. A HA hue light
+# entity's unique_id is the resource's UUID; which of the two it names decides
+# the path it is driven at.
+HUE_RESOURCE_LIGHT = "light"
+HUE_RESOURCE_GROUPED_LIGHT = "grouped_light"
+HUE_ACTION_UP = "up"
+HUE_ACTION_DOWN = "down"
+HUE_ACTION_STOP = "stop"
+# dimming_delta's brightness_delta and dimming's brightness are percent of
+# full scale.
+HUE_MAX_BRIGHTNESS_PCT = 100.0
+# CLIP v2 carries color temperature in mireds, clamped to this range.
+HUE_MIN_MIREK = 153
+HUE_MAX_MIREK = 500
+
+# deCONZ
+DECONZ_DOMAIN = "deconz"
+DECONZ_SERVICE_CONFIGURE = "configure"
+DECONZ_CONF_BRIDGE_ID = "bridgeid"
+# The REST sub-path the configure service appends to the entity's resource:
+# individual lights carry their dimmable state under /state, groups under
+# /action.
+DECONZ_FIELD_STATE = "/state"
+DECONZ_FIELD_ACTION = "/action"
+# bri runs 0-255 on the REST API; bri_inc is clamped to ±254 and 0 means
+# "stop the transition in place" — the Hue v1 idiom deCONZ inherited.
+DECONZ_MAX_BRI = 255
+DECONZ_MIN_BRI = 1
+DECONZ_MAX_BRI_INC = 254
+# transitiontime is tenths of a second in a uint16.
+DECONZ_MAX_TRANSITION_TENTHS = 65535
+
 # WiZ
 WIZ_DOMAIN = "wiz"
 WIZ_PORT = 38899
 # WiZ clamps setPilot `dimming` into this range; 0 does not switch a bulb off.
 WIZ_MIN_DIMMING = 1
 WIZ_MAX_DIMMING = 100
+
+# LIFX (LAN protocol)
+LIFX_DOMAIN = "lifx"
+LIFX_PORT = 56700
+# Light-message packet types (lan.developer.lifx.com): SetColor carries a full
+# HSBK plus a duration the firmware interpolates over; SetLightPower carries a
+# level and the same kind of duration.
+LIFX_PKT_SET_COLOR = 102
+LIFX_PKT_SET_LIGHT_POWER = 117
+# HSBK components are uint16; kelvin is bounded by what LIFX firmware accepts.
+LIFX_MAX_BRI = 65535
+# HA brightness 1 on LIFX's 16-bit scale — the still-on floor a downward move
+# aims at, mirroring the brightness-1 floor the simulation uses.
+LIFX_MIN_BRI = 257
+LIFX_MIN_KELVIN = 1500
+LIFX_MAX_KELVIN = 9000
+# The kelvin a color has when saturation is full — firmware ignores it then,
+# but the field must still carry something sane.
+LIFX_DEFAULT_KELVIN = 3500
+LIFX_POWER_ON = 65535
 
 # Simulation tuning
 TICK_INTERVAL = timedelta(milliseconds=50)  # 20 Hz cap

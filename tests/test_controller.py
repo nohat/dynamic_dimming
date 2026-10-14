@@ -239,3 +239,30 @@ async def test_simulated_override_then_native_move_cancels_sim_job(hass, mqtt_mo
     mqtt_mock.async_publish.assert_called_once_with(
         f"zigbee2mqtt/{IEEE}/set", '{"brightness_move": 90}', 0, False
     )
+
+
+async def test_step_cancels_an_active_simulated_ramp(hass):
+    set_light_state(hass, "light.lamp", brightness=100)
+    async_mock_service(hass, "light", "turn_on")
+    controller = _controller(hass)
+    await controller.async_move("light.lamp", DIRECTION_UP, "medium")
+    assert "light.lamp" in controller._jobs
+    await controller.async_step("light.lamp", DIRECTION_DOWN, 5.0)
+    assert "light.lamp" not in controller._jobs
+    await hass.async_block_till_done()
+
+
+async def test_simulated_override_prepares_stateful_native_backend(hass):
+    from unittest.mock import AsyncMock, Mock
+    from custom_components.dynamic_dimming.backends.base import DimmingBackend
+
+    set_light_state(hass, "light.lamp", brightness=100)
+    async_mock_service(hass, "light", "turn_on")
+    controller = _controller(hass)
+    native = Mock(spec=DimmingBackend)
+    native.claims.return_value = True
+    native.async_prepare_simulation = AsyncMock()
+    controller.native_backends = [native]
+    await controller.async_move("light.lamp", DIRECTION_UP, "medium", BACKEND_SIMULATED)
+    native.async_prepare_simulation.assert_awaited_once_with("light.lamp")
+    await controller.async_unload()
