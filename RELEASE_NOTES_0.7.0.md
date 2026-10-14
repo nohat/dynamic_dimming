@@ -15,7 +15,7 @@ This release makes the accumulated backend and targeting work available through 
 
 ## Validation and limits
 
-The local suite passes **363 tests** on Home Assistant **2026.2.3**, including command payloads, routing, cancellation, target resolution and the real aiohue 4.8.0 client request path. Network/device responses are mocked in this suite; it does not establish physical latency or fixture compatibility. See [TESTING.md](TESTING.md) for the recorded ZHA, Matter and WiZ hardware campaigns and other test procedures.
+The local suite passes **364 tests** on Home Assistant **2026.2.3**, including command payloads, routing, cancellation, target resolution and the real aiohue 4.8.0 client request path. Network/device responses are mocked in this suite; it does not establish physical latency or fixture compatibility. See [TESTING.md](TESTING.md) for the recorded ZHA, Matter and WiZ hardware campaigns and other test procedures.
 
 **Shelly, Hue, deCONZ and LIFX have not been validated on physical devices in this project.** Their automated coverage is useful but does not replace testing model/firmware behavior. Treat these paths as initial support and report device model, firmware, HA version and the failing action when filing issues. `backend: simulated` bypasses them for comparison.
 

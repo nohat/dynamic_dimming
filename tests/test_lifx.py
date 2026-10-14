@@ -418,3 +418,17 @@ async def test_simulation_handoff_forgets_ramp_before_later_stop(hass, turn_on_c
     assert len(_packets(sock)) == 2
     assert len(turn_on_calls) == 1
     assert entity_id not in backend._transitions
+
+
+async def test_move_replacing_power_fade_cancels_power_interpolation(hass):
+    backend, sock = _backend(hass)
+    entity_id = _lifx_light(hass, on=False)
+    with patch.object(lifx_mod.time, "monotonic", side_effect=[1000.0, 1001.5]):
+        await backend.async_fade(entity_id, 128, 3.0)
+        await backend.async_move(entity_id, DIRECTION_UP, 255)
+    pin, power_pin, move = _packets(sock)[2:]
+    assert pin.brightness == 16448
+    assert power_pin.type == LIFX_PKT_SET_LIGHT_POWER
+    assert power_pin.duration == 0
+    assert move.brightness == LIFX_MAX_BRI
+    assert not backend._transitions[entity_id].power_fade

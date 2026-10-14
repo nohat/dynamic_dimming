@@ -251,6 +251,17 @@ class LifxBackend(DimmingBackend):
             return 0.0
         return float(to_bri16(state.attributes.get("brightness") or 0))
 
+    def _pin_power_transition(self, entity_id: str, address: tuple[str, bytes], now: float) -> bool:
+        """A replacement color ramp must also cancel an active power ramp."""
+        record = self._active(entity_id, now)
+        if record is None or not record.power_fade:
+            return False
+        self._set_color(address, record.hue, record.saturation,
+                        int(round(record.estimate(now))), record.kelvin, 0)
+        self._send(address, LIFX_PKT_SET_LIGHT_POWER, _SET_POWER.pack(LIFX_POWER_ON, 0))
+        record.power_fade = False
+        return True
+
     async def _resync(self, entity_id: str, record: _Transition, bri16: float) -> None:
         """Re-assert the pinned level through the light entity, WiZ-style."""
         data: dict = {
@@ -278,12 +289,13 @@ class LifxBackend(DimmingBackend):
         address = self._address(entity_id)
         if address is None:
             return None
+        now = time.monotonic()
+        power_pinned = self._pin_power_transition(entity_id, address, now)
         state = self.hass.states.get(entity_id)
-        if state is None or state.state != "on":
+        if state is None or (state.state != "on" and not power_pinned):
             # Off stays off, as on the Zigbee-family paths — but here because a
             # SetColor while off would rewrite the stored level invisibly.
             return None
-        now = time.monotonic()
         start = self._current_bri16(entity_id, now)
         hue, saturation, kelvin = self._color_of(entity_id)
         target = float(LIFX_MAX_BRI if direction == DIRECTION_UP else LIFX_MIN_BRI)
@@ -388,7 +400,7 @@ class LifxBackend(DimmingBackend):
         if state is None or state.state in ("unavailable", "unknown"):
             return None
         now = time.monotonic()
-        self._active(entity_id, now)
+        power_pinned = self._pin_power_transition(entity_id, address, now)
         target = float(to_bri16(target_brightness))
         if color_temp_kelvin is not None:
             hue, saturation, kelvin = 0, 0, _clamp_kelvin(color_temp_kelvin)
@@ -396,7 +408,7 @@ class LifxBackend(DimmingBackend):
             hue, saturation, kelvin = self._color_of(entity_id)
         duration_ms = int(round(duration * 1000))
 
-        if state.state == "off":
+        if state.state == "off" and not power_pinned:
             self._set_color(address, hue, saturation, int(target), kelvin, 0)
             self._send(
                 address,

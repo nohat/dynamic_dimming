@@ -526,7 +526,7 @@ Piece 1 alone would have shortened the Matter work — "why didn't it claim my l
 
 ## 0.7.0 release verification — 2026-10-14
 
-The combined release passes 363 automated tests on HA 2026.2.3. Added regression checks cover a step cancelling an active simulation, completed LIFX ramps not restoring old state, a new LIFX move using the current reported brightness/color, and simulation handoff clearing a LIFX estimate. A contract test exercises the actual aiohue 4.8.0 resource controllers and authenticated request path for individual and grouped lights, with HTTP responses mocked.
+The combined release passes 364 automated tests on HA 2026.2.3. Added regression checks cover a step cancelling an active simulation, completed LIFX ramps not restoring old state, a new LIFX move using the current reported brightness/color, and simulation handoff clearing a LIFX estimate. A contract test exercises the actual aiohue 4.8.0 resource controllers and authenticated request path for individual and grouped lights, with HTTP responses mocked.
 
 No physical Shelly, Hue, deCONZ or LIFX tests were performed for this release. The addenda above are test procedures, not completed results. Hardware timing, packet-loss behavior, rapid reversals, color preservation, mixed-device groups and default firmware compatibility remain to be measured.
 
