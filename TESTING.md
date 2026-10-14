@@ -345,6 +345,94 @@ unexercised. If it is wrong, the backend does not work from user-owned
 automations — the main way anyone would drive hold-to-dim. Z12, Z14 and Z15 also
 remain untested on hardware.
 
+### Shelly addendum
+
+The Shelly backend owns its transport — one HTTP POST to the device's `/rpc`
+endpoint per command — so its risks are the RPC contract, none of which has run
+against real hardware: the method and parameter names were read out of the
+Gen2+ API documentation, not sent. The fleet currently has no Gen2+ Shelly
+light, so this whole table is open. **H2 and H4 are the steps that could
+invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| H1 | Pre-flight. From the entity registry record the light's `unique_id`; from the config entry note `gen`, host, and whether a password is set | The backend takes everything from those two places. If the `unique_id` is not `<MAC>-light:<n>` (or `cct:`/`rgb:`/`rgbw:`/`rgbcct:`), **stop and report it** — address parsing is the piece with no live coverage |
+| H2 | `move` up with `backend: native`, watching the device's debug log or the HTTP response | One `Light.DimUp` POST, accepted. A 404 or a `-105` error names a contract mismatch — capture the response body |
+| H3 | Press-and-release hold | Exactly two POSTs per gesture — `DimUp` on press, `DimStop` on release — and the ramp is visibly the device's own |
+| H4 | `move` down and let it run out | Record where it lands and whether the light **stays on**. The DimDown floor is firmware behavior this backend inherits and has never observed |
+| H5 | Compare `rate: slow` / `medium` / `fast` | Three distinguishable sweep times (fade_rate classes 1/3/5). Record the actual seconds per class — the mapping's anchors are a guess the firmware gets to correct |
+| H6 | `fade` to 50% over 5 s, then `stop` mid-fade | One `Set` with `transition_duration: 5`; the stop is a `DimStop` and whether it halts a `Set` transition is **unverified** — record what happens |
+| H7 | On a password-protected device, repeat H3 | The digest challenge is answered from the config entry's credentials; one 401 then success. A repeated 401 means the SHA-256 digest path failed — capture the `WWW-Authenticate` header |
+| H8 | Watch HA's state during a hold | Brightness follows the ramp with no resync call — the device notifies the Shelly integration's websocket on its own |
+
+### Hue addendum
+
+The Hue backend rides the loaded config entry's aiohue client rather than a
+transport of its own, so its risks are the CLIP v2 payloads and the resource
+addressing — none of which has run against a real bridge. The payload field
+names were read out of the published CLIP v2 schema, not sent. The fleet
+currently has no Hue bridge, so this whole table is open. **U2 and U6 are the
+steps that could invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| U1 | Pre-flight. From the entity registry record a Hue light's `unique_id` and the config entry's `api_version` | The `unique_id` should be the CLIP resource UUID itself — that one string is the whole addressing scheme. A v1-era id means the entity predates the v2 migration; **stop and report it** |
+| U2 | `move` up with `backend: native`, watching the bridge's response | One PUT of `dimming_delta {action: up}` with a `dynamics` duration, HTTP 200. A 400 naming a field is a schema mismatch — capture the CLIP error body |
+| U3 | Press-and-release hold | Exactly two PUTs per gesture; the ramp is visibly the bridge's own, and HA's state follows it live off the event stream with no resync call |
+| U4 | `move` down and let it run out | Clips at the light's **minimum dim level** and stays lit. Record the landing brightness — the stays-on floor here is the bridge's, not ours |
+| U5 | Compare `rate: slow` / `medium` / `fast` from ~50% | Sweep times near 3.2 s / 1.4 s / 0.8 s to the top rail — duration is computed from distance at the profile rate, so a stale HA brightness shows up here as a wrong sweep time at the right destination |
+| U6 | `fade` to 50% over 5 s, then `stop` mid-fade | The fade is one `dimming` + `dynamics` PUT. The stop sends `dimming_delta {action: stop}`, and whether that halts a plain `dimming` transition (rather than only a delta one) is **unverified** — record what happens |
+| U7 | `move` on a Hue **room or zone** entity | Claimed and ramped as one `grouped_light` PUT — every member in step. Compare against a HA light group of the same bulbs under simulation |
+| U8 | `move` up on a Hue light that is **off** | Record what the bridge does — `dimming_delta` makes no on/off promise, and the off-light contract on this backend is whatever the bridge answers |
+| U9 | Two holds in quick succession on different Hue lights | Both ramp; watch for 429s in the log. The whole point of this backend is staying under the bridge's documented ~10 req/s comfort zone |
+
+### deCONZ addendum
+
+Like ZHA, the deCONZ backend drives another integration's public service —
+`deconz.configure` — so the risks are that contract and the REST payloads, none
+of which has run against a real gateway. `bri_inc` with a `transitiontime` and
+the `bri_inc: 0` stop are the Hue v1 idiom the deCONZ REST docs describe for
+hold-to-dim, but the fleet currently has no deCONZ gateway, so this whole table
+is open. **D2 and D3 are the steps that could invalidate the backend; run them
+first.**
+
+| # | Step | Expected |
+|---|---|---|
+| D1 | Pre-flight. Record the light's `unique_id` and the config entry's `unique_id` (the bridge id) | An individual light's `unique_id` should lead with its 8-group Zigbee serial (seven colons); a group's should read `<bridgeid>-/groups/<n>`. Anything else, **stop and report it** — the field routing (`/state` vs `/action`) hangs off those two shapes |
+| D2 | `move` up with `backend: native`, deCONZ REST log at debug | One PUT of `{"bri_inc": <distance>, "transitiontime": <tenths>}` to `/lights/<id>/state`, accepted. An error naming `bri_inc` invalidates the backend — capture the response |
+| D3 | Press-and-release hold | Exactly two PUTs per gesture — the increment on press, `bri_inc: 0` on release — and the level holds where it was, no snap to the original target |
+| D4 | `move` down and let it run out | Lands at bri 1 and **stays lit** — the increment aims one unit above zero rather than at it |
+| D5 | Release a hold, then watch the HA state | Brightness converges on its own off the deCONZ websocket stream; there is no resync call to look for |
+| D6 | `step` up 5%, `step` down 5% | Two discrete nudges with `transitiontime: 0` — compare against the Z2M and ZHA entries; three gateways to the same silicon should feel identical |
+| D7 | `fade` to 50% over 5 s, with and without `color_temp_kelvin` | One `{"on": true, "bri": ..., "transitiontime": 50}` write, preceded by a zero-transition `ct` write when a color was asked for. The docs hint `transitiontime` is ignored *for the `on` change itself*; confirm the bri ramp still glides when `on` rides along — if it snaps, the fade needs the `on` split out |
+| D8 | `move` on a deCONZ **group** entity | Claimed, and the PUT lands under `/action` — the whole group ramps as one Zigbee group cast. Record member drift against the same bulbs as a HA light group under simulation |
+| D9 | Two gateways, if the house ever has them | Every call carries the entity's own `bridgeid`; a light on the non-master gateway must still move |
+| D10 | `move` up on a deCONZ light that is **off** | Record what the gateway does — `bri_inc` makes no on/off promise, and the off-light contract here is whatever deCONZ answers |
+
+### LIFX addendum
+
+The LIFX backend owns its transport like WiZ's — raw fire-and-forget UDP — but
+unlike WiZ the bulb runs the ramp, and unlike everything else the *release* is
+arithmetic: LIFX has no stop verb, so `stop` pins the level the started ramp
+must mathematically be at. That estimate is the backend's one novel idea and
+its one novel risk, and none of it has run against real hardware. The packet
+layouts were written from the published LAN protocol tables, not sent. **L2 and
+L3 are the steps that could invalidate the backend; run them first.**
+
+| # | Step | Expected |
+|---|---|---|
+| L1 | Pre-flight. Record the light's `unique_id` and the config entry's host | The `unique_id` should be the bulb's colon-separated serial (`d0:73:d5:…`) — its bytes are the packet's target field, so a different shape means silent degradation to simulation. **Stop and report it** if so |
+| L2 | `move` up with `backend: native`, packet capture or just eyes on the bulb | The bulb visibly ramps after exactly one datagram. Nothing moving means the header or HSBK packing is wrong — capture the 49-byte packet and compare against the protocol tables |
+| L3 | Hold ~2 s, release, then wait | The level holds where release caught it — the pin is a *computed* level, so a systematic overshoot or snap-back means the bulb's interpolation and our arithmetic disagree (measure the offset against hold time) |
+| L4 | `move` on a **color** (non-white) LIFX bulb, mid-saturation | The color must not shift during the ramp — every write carries the HSBK read from HA's state. A hue or saturation jump means the state-derived HSBK mapping is off |
+| L5 | `move` up, then immediately `move` down with no stop | The reversal starts from where the light visibly is (the active ramp's estimate), not from HA's stale brightness |
+| L6 | `move` down and let it run out | Floors at HA brightness 1 (bri16 257) and **stays lit**; brightness 0 on LIFX is dark-while-on, which the floor exists to avoid |
+| L7 | `move` up on a LIFX bulb that is **off** | Declined — nothing is sent and nothing lights. `SetColor` while off would rewrite the stored level invisibly, which is why this backend refuses rather than picking either Zigbee's or WiZ's off-light behavior |
+| L8 | Release a hold, then check HA state | Brightness matches the pinned level immediately — `stop` re-asserts it through `light.turn_on`, WiZ-style. Then let a ramp run out to the rail instead: HA converges only on the LIFX integration's next poll; record how long that takes |
+| L9 | `fade` to 50% over 5 s, with and without `color_temp_kelvin` | One interpolated `SetColor` (preceded by a zero-duration color assert when a kelvin was asked for); mid-fade `stop` pins by the same arithmetic as a move |
+| L10 | `fade` up from **off** | Color and target level land while dark, then `SetLightPower` fades in over the duration — LIFX's own fade-from-black idiom. A `stop` mid power-fade pins both color and power; record whether the light lands where the estimate says |
+| L11 | `step` up 5% | Routed through simulation: one acknowledged `light.turn_on`, HA state fresh, no UDP from this backend |
+
 ## Recording results
 
 One device report per fleet entry, filed through the repo's own issue form, marked as the author's. Aggregate outcomes go in the README capability table once the fleet is done. Raw notes (log excerpts, timings) can live in the report's free-text field; exact model numbers always.
@@ -435,3 +523,17 @@ Mind the length: GitHub answers `414 URI Too Long` past a few kilobytes, so the 
 ### Why this order
 
 Piece 1 alone would have shortened the Matter work — "why didn't it claim my light" is the first question every new backend raises, and it is currently unanswerable without a debugger. Piece 2 is what makes a report comparable across houses. Piece 3 is polish, and it is worth doing only after 1 and 2 exist, because a pre-filled link to a report with nothing in it is just a shorter way to file a vague issue.
+
+## 0.7.0 release verification — 2026-10-14
+
+The combined release passes 364 automated tests on HA 2026.2.3. Added regression checks cover a step cancelling an active simulation, completed LIFX ramps not restoring old state, a new LIFX move using the current reported brightness/color, and simulation handoff clearing a LIFX estimate. A contract test exercises the actual aiohue 4.8.0 resource controllers and authenticated request path for individual and grouped lights, with HTTP responses mocked.
+
+No physical Shelly, Hue, deCONZ or LIFX tests were performed for this release. The addenda above are test procedures, not completed results. Hardware timing, packet-loss behavior, rapid reversals, color preservation, mixed-device groups and default firmware compatibility remain to be measured.
+
+Source checks used the installed HA 2026.2.3 integration code for entity identities and service/client interfaces, together with:
+
+- https://shelly-api-docs.shelly.cloud/gen2/ComponentsAndServices/Light/
+- https://dresden-elektronik.github.io/deconz-rest-doc/endpoints/lights/
+- https://lan.developer.lifx.com/docs/changing-a-device
+
+These checks establish interface expectations, not device performance.

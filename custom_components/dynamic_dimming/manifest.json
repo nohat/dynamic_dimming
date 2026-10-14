@@ -1,23 +1,27 @@
 {
   "domain": "dynamic_dimming",
   "name": "Dynamic Dimming",
+  "after_dependencies": [
+    "deconz",
+    "hue",
+    "lifx",
+    "matter",
+    "mqtt",
+    "shelly",
+    "tasmota",
+    "zha",
+    "zwave_js"
+  ],
   "codeowners": [
     "@nohat"
   ],
   "config_flow": true,
   "dependencies": [],
-  "after_dependencies": [
-    "matter",
-    "mqtt",
-    "tasmota",
-    "zha",
-    "zwave_js"
-  ],
   "documentation": "https://github.com/nohat/dynamic_dimming",
   "integration_type": "service",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/nohat/dynamic_dimming/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.6.1"
+  "version": "0.7.0"
 }

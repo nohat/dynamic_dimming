@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-e0912a.svg?style=flat-square" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-e0912a.svg?style=flat-square" alt="Home Assistant 2026.2+">
-  <img src="https://img.shields.io/badge/version-v0.6.1-e0912a.svg?style=flat-square" alt="v0.6.1">
+  <img src="https://img.shields.io/badge/version-v0.7.0-e0912a.svg?style=flat-square" alt="v0.7.0">
 </p>
 
 ---
@@ -23,19 +23,20 @@ same pair inherited by Matter. Home Assistant has no way to ask for it —
 the capability sits unused in hardware you already own.
 
 Dynamic Dimming adds the missing verbs: `move` / `stop` / `step` / `fade`. On
-**Zigbee2MQTT, Tasmota, Matter, ZHA and Z-Wave JS** it sends the protocol's own
-command — one message starts the ramp, one stops it, and the device does the
-dimming itself, with no stream of brightness writes crossing your mesh. **WiZ**
-has no such command, so it gets a native *transport* instead: still stepped, but
-over direct fire-and-forget UDP rather than through `light.turn_on`. Everything
-else falls back to stepped simulation on a perceptual curve. Every dimmable
-light works — the ones whose protocol supports it work best.
+**Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS, Shelly (Gen2+), Hue and
+deCONZ** it sends the protocol's own command — one message starts the ramp, one
+stops it, and the device does the dimming itself, with no stream of brightness
+writes crossing your mesh. **LIFX** has no stop verb but does interpolate every
+command over a duration, so a hold is one datagram aimed at the rail and a
+release estimates the current level and writes it back. This is not a device-side stop, and packet loss or stale state can produce a visible adjustment. **WiZ** has
+neither, so it gets a native *transport* instead: still stepped, but over
+direct fire-and-forget UDP rather than through `light.turn_on`. Everything else
+falls back to stepped simulation on a perceptual curve. Other dimmable entities use the HA light service fallback; actual behavior depends on the light integration and hardware.
 
-> **v0.6.0 scope:** the six native backends listed below, with stepped
+> **Current scope:** the ten native backends listed below, with stepped
 > simulation as the fallback everywhere else. Simulated ramps travel a
 > perceptual curve by default, and a higher rate takes bigger steps rather than
-> more of them — so even the fallback doesn't flood your mesh. Shelly and Hue
-> come next.
+> more of them — so even the fallback doesn't flood your mesh.
 
 ## Dimming curve
 
@@ -61,9 +62,9 @@ the same apparent change at either end of the range.
 Set the default in the integration's options, or override per call with the
 `curve` field on `move`, `step` and `fade`. It applies only where this
 integration steps the ramp itself — the simulation and WiZ paths. Backends that
-hand the ramp to device firmware (Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS)
-ignore it: the device's own curve applies, and this integration does not mutate
-device config.
+hand the ramp to device firmware (Zigbee2MQTT, Tasmota, Matter, ZHA, Z-Wave JS,
+Shelly, Hue, deCONZ, LIFX) ignore it: the device's own curve applies, and this
+integration does not mutate device config.
 
 ### Minimum brightness
 
@@ -154,6 +155,8 @@ button-release.
 
 ## Native backends
 
+For Hue and deCONZ, cached brightness is used to compute a relative delta and duration. Stale state can affect both the rate and the endpoint, especially after a quick reversal. LIFX has a separate estimated-stop limitation described below. Hardware testing of these cases is outstanding. Native fade floors and timing resolution vary by platform; use `light.turn_off` when an off state is required.
+
 On platforms whose protocol already has move/stop commands, the integration sends those commands instead of simulating the ramp — one message to start, one to stop, and the device dims itself.
 
 | Platform | How it is driven | Notes |
@@ -163,16 +166,22 @@ On platforms whose protocol already has move/stop commands, the integration send
 | Matter | Level Control cluster `Move` / `Stop` / `Step`, sent as `device_command` calls over the integration's **own websocket** to the Matter server | Home Assistant's Matter integration surfaces no move/stop anywhere — not on the light platform, not as a service, not in its websocket API — so this backend opens its own connection to the same server the Matter config entry points at. Rate profiles map directly to Matter's level-units-per-second. Plain `Move`/`Step` are used (never the `WithOnOff` variants), so dimming down stops at the lowest on-level; the flip side, per the spec's Options handling, is that a `move` on a light that is **off** does nothing. `fade` is native too, as one `MoveToLevelWithOnOff` with a transition time — on Thread that is one command instead of forty. |
 | ZHA | Level Control cluster `Move` / `Stop` / `Step`, issued through ZHA's own `zha.issue_zigbee_cluster_command` service | The same cluster the Zigbee2MQTT path drives, so it makes the same choices: rate profiles map directly to level-units-per-second, and plain `Move`/`Step` are used (never the `WithOnOff` variants), so dimming down stops at the lowest on-level and a `move` on a light that is **off** does nothing. No extra connection is needed — ZHA publishes a service that reaches any cluster on any node, so this backend is a service call. `fade` is native too, as one `MoveToLevelWithOnOff` with a transition time. Group lights are not claimed (they need a group command) and fall back to simulation. |
 | Z-Wave JS | Multilevel Switch CC `StartLevelChange` / `StopLevelChange`, invoked through the `zwave_js.invoke_cc_api` service | Z-Wave carries no rate — only the time a full-scale sweep should take — so the rate profiles become durations of 6 s, 3 s and 2 s. The encoding is whole seconds, which is coarse, but the device still runs the ramp. Targeting the service by entity is what makes a multi-channel dimmer address its own channel rather than endpoint 0. The command class has **no** relative step, so `step` falls back to a single absolute write, which costs exactly what a native step would have. `fade` also falls back: `Set` with a duration can only express whole seconds, and the fade service promises an exact level at an exact time. |
+| Shelly | `DimUp` / `DimDown` / `DimStop` on the light's RPC component, POSTed to the device's own HTTP endpoint | Gen2+ (RPC) devices only — the whole (Pro) Dimmer family, plus the CCT/RGB/RGBW light components, all of which carry the same three calls. The device runs the ramp; the existing Shelly integration supplies state updates. `fade_rate` is a discrete 1–5 speed class rather than a rate, so the profiles map slow/medium/fast → 1/3/5 and the exact sweep time is the firmware's. This adapter does not implement a relative step, so `step` falls back to a single absolute write — the same cost a native step would have had. `fade` is native, as one `Set` carrying `transition_duration` (and `ct`, on components with a white channel). Password-protected devices are driven with digest auth from the config entry; Gen1 devices fall back to simulation. |
+| Hue | `dimming_delta` transitions PUT to the light's CLIP v2 resource, through the aiohue client the Hue config entry already holds | A move sends one bridge API request; release sends a stop request. The bridge speaks durations rather than rates, so a move is "delta to the rail over the time that distance takes at the requested rate", computed from the current brightness. Dimming down clips at the light's own minimum dim level and stays lit. `step` is native (`dimming_delta` with the delta), `fade` is native (`dimming` with a `dynamics` duration, `on` riding along), and a **Hue room or zone entity** is claimed too — `grouped_light` answers the same verbs as one bridge-coordinated command. API v2 bridges only; v1 falls back to simulation. |
+| deCONZ | `bri_inc` transitions written through the `deconz.configure` service; `bri_inc: 0` stops the ramp in place | The Hue v1 idiom deCONZ inherited: one REST write starts the gateway ramping the light, one halts it. Like the ZHA and Z-Wave JS paths this drives a public service, so there is no extra connection and the service's absence degrades cleanly to simulation. deCONZ speaks target-and-duration rather than rate, so a move is the distance to the rail over the time it takes at the requested rate, computed from current brightness; dimming down aims at bri 1 and stays lit. `step` is native (`bri_inc` with `transitiontime: 0`, matching the other Zigbee paths), `fade` is native (`bri` with a `transitiontime`, color asserted first), and deCONZ **group** entities are claimed too — dimmed under `/action` as one Zigbee group cast. Multi-gateway houses work: each call carries the entity's own `bridgeid`. |
+| LIFX | Device-side `SetColor` transitions over LAN UDP; estimated stop | There is no native stop command. The backend estimates brightness from the requested ramp and elapsed time, then sends a zero-duration write and reasserts that level through HA. Packet loss, stale starting state, external commands and device timing can make the estimate inaccurate. Color comes from HA or the active ramp; concurrent color changes can be overwritten. Completed ramps are forgotten so later stops cannot restore an old level. `move` leaves off bulbs off; `fade` can turn them on. `step` uses the HA light integration. This path is not suitable where an exact device-side stop is required. |
 | WiZ | A stream of absolute `setPilot` datagrams straight to the bulb's IP on UDP 38899, sent fire-and-forget at the tick rate | WiZ firmware has no ramp command and the HA integration doesn't advertise `TRANSITION`, so the ramp still has to be stepped — but not through `light.turn_on`. An acknowledged `setPilot` round-trip measures 38–476 ms (median ~160 ms), which a 20 Hz ramp cannot wait on; the same datagram sent unacknowledged costs ~0.3 ms. Every tick carries an absolute level, so a dropped datagram self-corrects on the next one. A light **group** whose members are all WiZ bulbs is claimed too, and driven from a single tick so the bulbs stay visibly in step. |
 | Everything else | Stepped simulation | |
 
-Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine goes stale while a bulb is moving; `stop` and `step` re-assert the final level through the light entity to put the two back in agreement. The Matter, ZHA and Z-Wave JS paths need no such reconciliation for **brightness**: the device reports its own level and each integration's existing subscription feeds that straight back into Home Assistant, measured at one to two seconds on ZHA.
+Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine goes stale while a bulb is moving; `stop` and `step` re-assert the final level through the light entity to put the two back in agreement. LIFX also reasserts its estimated stop level through the light entity. The Matter, ZHA and Z-Wave JS paths need no such reconciliation for **brightness**: the device reports its own level and each integration's existing subscription feeds that straight back into Home Assistant, measured at one to two seconds on ZHA.
 
 **Color** is the exception, and only on `fade`. ZHA subscribes to `color_temperature` on a thirty-second minimum interval rather than the one-second interval it gives brightness, and plenty of bulbs never bind the report at all — so after a fade asserts a white, the fixture is right while `color_temp_kelvin` can read the old value for tens of seconds, occasionally until something forces a read. Call `homeassistant.update_entity` after the fade if an automation needs the attribute promptly.
 
 Selection is automatic. `move`, `step` and `fade` also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light.
 
 ## Status
+
+Version 0.7.0 adds ZHA, Z-Wave JS, Shelly Gen2+, Hue v2, deCONZ and LIFX, plus standard HA targets for multiple lights and areas. Shelly, Hue, deCONZ and LIFX have automated protocol/routing tests but have **not been validated on physical devices in this project**. See [TESTING.md](TESTING.md) for recorded hardware evidence and the remaining checks. Their existing HA integrations supply state updates; update timing has not been measured here. Use `backend: simulated` to compare or bypass an adapter.
 
 Part of a broader effort to bring native move/stop dimming to the Home Assistant
 ecosystem. Requires Home Assistant 2026.2 or newer.

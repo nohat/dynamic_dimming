@@ -70,6 +70,9 @@ class DimmingBackend(ABC):
         """
         raise NotImplementedError
 
+    async def async_prepare_simulation(self, entity_id: str) -> None:
+        """Release backend state before an HA-service command replaces a ramp."""
+
     async def async_setup(self) -> None:
         """One-time initialization (e.g. MQTT subscriptions)."""
 
