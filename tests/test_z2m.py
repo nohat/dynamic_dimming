@@ -100,3 +100,20 @@ async def test_custom_base_topic(hass, mqtt_mock):
     mqtt_mock.async_publish.assert_called_once_with(
         f"z2m/{IEEE}/set", '{"brightness_move": "stop"}', 0, False
     )
+
+
+async def test_group_identifier_is_not_claimed(hass):
+    # A Zigbee2MQTT group is a registry device under the same prefix, but what
+    # follows is not an address; publishing to it would reach nothing.
+    from custom_components.dynamic_dimming.backends.z2m import Z2MBackend
+    from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+    from .conftest import register_device_light
+
+    hass.config.components.add("mqtt")
+    group = register_device_light(
+        hass, "z2m_group", domain="mqtt",
+        identifiers={("mqtt", "zigbee2mqtt_zigbee2mqtt_3")},
+    )
+    backend = Z2MBackend(hass, MockConfigEntry(domain="dynamic_dimming"))
+    assert backend.claims(group) is False

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from collections.abc import Iterable
 
 from homeassistant.config_entries import ConfigEntry
@@ -15,7 +17,7 @@ from .backends.hue import HueBackend
 from .backends.lifx import LifxBackend
 from .backends.matter import MatterBackend
 from .backends.shelly import ShellyBackend
-from .backends.simulation import SimulationBackend
+from .backends.simulation import SimulationBackend, resolve_rate
 from .backends.tasmota import TasmotaBackend
 from .backends.wiz import WizBackend
 from .backends.z2m import Z2MBackend
@@ -31,6 +33,11 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
+# The longest a native ramp is remembered as still running. A real ramp is
+# over sooner (full scale divided by its rate); this bounds the slow ones.
+_MAX_NATIVE_RAMP_SECONDS = 10.0
+_FULL_SCALE = 255.0
+
 
 def _each(entity_ids: str | Iterable[str]) -> list[str]:
     """One entity or many, always as a list.
@@ -41,6 +48,19 @@ def _each(entity_ids: str | Iterable[str]) -> list[str]:
     if isinstance(entity_ids, str):
         return [entity_ids]
     return list(entity_ids)
+
+
+async def _fan_out(coros: list) -> None:
+    """Run one coroutine per entity together, isolating their failures.
+
+    Awaiting them in turn would let one unreachable device's timeout delay
+    every light after it, and one exception abandon the rest. All of them run;
+    afterwards the first failure is raised so the caller still hears about it.
+    """
+    results = await asyncio.gather(*coros, return_exceptions=True)
+    for result in results:
+        if isinstance(result, Exception):
+            raise result
 
 
 class DimmingController:
@@ -63,6 +83,11 @@ class DimmingController:
             WizBackend(hass, entry),
         ]
         self._jobs: dict[str, CALLBACK_TYPE] = {}
+        # entity_id -> (direction, rate, deadline) for a native ramp believed
+        # to be running. Many remotes repeat their "hold" event several times
+        # a second for as long as the button is down; without this each
+        # repeat would put another identical Move on the wire for every light.
+        self._native_moves: dict[str, tuple[str, str | float | None, float]] = {}
 
     async def async_setup(self) -> None:
         for backend in self.native_backends:
@@ -73,6 +98,7 @@ class DimmingController:
         # leave a 20 Hz interval firing after the config entry is gone.
         for entity_id in list(self._jobs):
             self._cancel_job(entity_id)
+        self._native_moves.clear()
         for backend in self.native_backends:
             await backend.async_unload()
 
@@ -104,6 +130,7 @@ class DimmingController:
         return native or self._simulation
 
     def _cancel_job(self, entity_id: str) -> None:
+        self._native_moves.pop(entity_id, None)
         unsub = self._jobs.pop(entity_id, None)
         if unsub is not None:
             unsub()
@@ -122,8 +149,12 @@ class DimmingController:
         backend: str = "auto",
         curve: str | float | None = None,
     ) -> None:
-        for entity_id in _each(entity_ids):
-            await self._async_move_one(entity_id, direction, rate, backend, curve)
+        await _fan_out(
+            [
+                self._async_move_one(entity_id, direction, rate, backend, curve)
+                for entity_id in _each(entity_ids)
+            ]
+        )
 
     async def _async_move_one(
         self,
@@ -137,6 +168,10 @@ class DimmingController:
         if target is None:
             _LOGGER.debug("move ignored: %s is unsupported", entity_id)
             return
+        native = target is not self._simulation
+        if native and self._is_repeat(entity_id, direction, rate):
+            _LOGGER.debug("move ignored: %s is already ramping %s", entity_id, direction)
+            return
         # Superseding a native ramp here does not publish a native stop: the
         # next absolute or native command replaces the device's own ramp per
         # Zigbee Level-cluster/Tasmota semantics, so the overlap when
@@ -146,6 +181,30 @@ class DimmingController:
         unsub = await target.async_move(entity_id, direction, rate, curve)
         if unsub is not None:
             self._jobs[entity_id] = unsub
+        elif native:
+            # Fire-and-forget: the device owns the ramp. Remember it for as
+            # long as it can still be running, so repeats are recognized.
+            ramp_seconds = min(
+                _MAX_NATIVE_RAMP_SECONDS, _FULL_SCALE / resolve_rate(rate)
+            )
+            self._native_moves[entity_id] = (
+                direction,
+                rate,
+                time.monotonic() + ramp_seconds,
+            )
+
+    def _is_repeat(
+        self, entity_id: str, direction: str, rate: str | float | None
+    ) -> bool:
+        """Whether this move restates a native ramp that is still running."""
+        active = self._native_moves.get(entity_id)
+        if active is None:
+            return False
+        active_direction, active_rate, deadline = active
+        if time.monotonic() >= deadline:
+            del self._native_moves[entity_id]
+            return False
+        return active_direction == direction and active_rate == rate
 
     async def async_fade(
         self,
@@ -164,15 +223,19 @@ class DimmingController:
         the device has no way to promise a level at a time -- simulation writes
         absolute values and therefore always lands on the target.
         """
-        for entity_id in _each(entity_ids):
-            await self._async_fade_one(
-                entity_id,
-                target_brightness,
-                duration,
-                backend,
-                curve,
-                color_temp_kelvin,
-            )
+        await _fan_out(
+            [
+                self._async_fade_one(
+                    entity_id,
+                    target_brightness,
+                    duration,
+                    backend,
+                    curve,
+                    color_temp_kelvin,
+                )
+                for entity_id in _each(entity_ids)
+            ]
+        )
 
     async def _async_fade_one(
         self,
@@ -187,6 +250,8 @@ class DimmingController:
         if target is None:
             return
         if not target.supports_fade:
+            if backend == BACKEND_NATIVE:
+                self._raise_no_native(entity_id)
             target = self._simulation
         self._cancel_job(entity_id)
         await self._prepare_target(entity_id, target)
@@ -197,14 +262,23 @@ class DimmingController:
             self._jobs[entity_id] = unsub
 
     async def async_stop(self, entity_ids: str | Iterable[str]) -> None:
+        # Belt and braces: kill any simulation job AND tell a claiming native
+        # backend to stop, regardless of how the move was started — a light
+        # moved under override must never end up unstoppable.
+        stops = []
         for entity_id in _each(entity_ids):
-            # Belt and braces: kill any simulation job AND tell a claiming
-            # native backend to stop, regardless of how the move was started — a
-            # light moved under override must never end up unstoppable.
             self._cancel_job(entity_id)
             native = self._claimer(entity_id)
             if native is not None:
-                await native.async_stop(entity_id)
+                stops.append((entity_id, native.async_stop(entity_id)))
+        # Together, not in turn: a stop that waits out one unreachable device's
+        # timeout must not leave every light after it ramping to the rail.
+        results = await asyncio.gather(
+            *(stop for _, stop in stops), return_exceptions=True
+        )
+        for (entity_id, _), result in zip(stops, results):
+            if isinstance(result, Exception):
+                _LOGGER.warning("stop for %s failed: %s", entity_id, result)
 
     async def async_step(
         self,
@@ -214,8 +288,12 @@ class DimmingController:
         backend: str = "auto",
         curve: str | float | None = None,
     ) -> None:
-        for entity_id in _each(entity_ids):
-            await self._async_step_one(entity_id, direction, step_pct, backend, curve)
+        await _fan_out(
+            [
+                self._async_step_one(entity_id, direction, step_pct, backend, curve)
+                for entity_id in _each(entity_ids)
+            ]
+        )
 
     async def _async_step_one(
         self,
@@ -233,6 +311,8 @@ class DimmingController:
         # it falls back. Simulation reads the level and writes an absolute one,
         # which costs the same single command a native step would have.
         if not target.supports_step:
+            if backend == BACKEND_NATIVE:
+                self._raise_no_native(entity_id)
             target = self._simulation
         self._cancel_job(entity_id)
         await self._prepare_target(entity_id, target)
