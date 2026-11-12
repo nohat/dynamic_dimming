@@ -11,7 +11,7 @@
 <p align="center">
   <a href="https://hacs.xyz/"><img src="https://img.shields.io/badge/HACS-Custom-e0912a.svg?style=flat-square" alt="HACS Custom"></a>
   <img src="https://img.shields.io/badge/Home%20Assistant-2026.2%2B-e0912a.svg?style=flat-square" alt="Home Assistant 2026.2+">
-  <img src="https://img.shields.io/badge/version-v0.7.0-e0912a.svg?style=flat-square" alt="v0.7.0">
+  <img src="https://img.shields.io/badge/version-v0.8.0-e0912a.svg?style=flat-square" alt="v0.8.0">
 </p>
 
 ---
@@ -33,10 +33,70 @@ neither, so it gets a native *transport* instead: still stepped, but over
 direct fire-and-forget UDP rather than through `light.turn_on`. Everything else
 falls back to stepped simulation on a perceptual curve. Other dimmable entities use the HA light service fallback; actual behavior depends on the light integration and hardware.
 
-> **Current scope:** the ten native backends listed below, with stepped
-> simulation as the fallback everywhere else. Simulated ramps travel a
-> perceptual curve by default, and a higher rate takes bigger steps rather than
-> more of them — so even the fallback doesn't flood your mesh.
+> **Current scope:** the native backends listed below, with stepped
+> simulation as the fallback everywhere else. Most of them have not yet been
+> run on real hardware in this project. The table that follows says which.
+
+## What has actually been tested
+
+A backend's unit tests show that it sends the command the protocol documents.
+Only a real device shows what the firmware, bridge or mesh does with it.
+
+| Backend | Evidence so far |
+|---|---|
+| ZHA | Hardware results recorded for one bulb ([TESTING.md](TESTING.md)); some checks still unrun |
+| Matter | Hardware results recorded for one bulb; some checks still unrun |
+| Zigbee2MQTT, Tasmota, WiZ | In the author's own fleet; no recorded results yet |
+| Z-Wave JS, Shelly, Hue, deCONZ, LIFX | **Unit tests only. Never run on a device in this project.** |
+| Simulation | Logic unit-tested; traffic on a real mesh not yet measured |
+
+If you own one of the untested platforms, a ten-minute pass through
+[TESTING.md](TESTING.md) and a
+[device report](https://github.com/nohat/dynamic_dimming/issues/new/choose) is
+the most useful contribution this project can receive. `backend: simulated` on
+any call bypasses a native backend that misbehaves.
+
+## Traffic
+
+What each path puts on your network, per light:
+
+| Path | On press | While held | On release |
+|---|---|---|---|
+| Zigbee2MQTT, ZHA, Matter, Z-Wave JS, Tasmota, Shelly, Hue, deCONZ (individual lights) | 1 command | nothing | 1 command |
+| LIFX | 1–2 datagrams | nothing | 1 datagram plus a resync |
+| WiZ | 20 datagrams a second, direct to the bulb over Wi-Fi | same | 1 resync |
+| Simulation on a Zigbee, Thread or Hue light | 1 write | at most 5 writes a second, **shared by every simulated ramp on that transport** | nothing |
+| Simulation on a Z-Wave light | 1 write | at most 1 write a second, shared the same way | nothing |
+| Simulation on anything else | 1 write | up to 20 writes a second, never more than one unacknowledged | nothing |
+
+Simulation is reached more often than the list of native backends suggests: a
+Home Assistant light group, a ZHA or Zigbee2MQTT group, a `fade` on
+Zigbee2MQTT or Z-Wave JS, a `step` on Z-Wave JS, Shelly or LIFX, and any light
+whose native backend could not resolve it. These rules apply to all of it:
+
+- **One write in flight.** The next write waits for the previous one to be
+  acknowledged, so a slow integration is written to slowly rather than handed
+  a growing queue of stale levels that keep arriving after you let go.
+- **Latest level wins**, and an unchanged level is never resent.
+- **Mesh and bridge budgets.** On the transports in the table the gap between
+  writes is stretched to stay inside a shared budget, and where the light
+  supports `transition` each write carries one so the ramp still reads as
+  continuous. A light group is charged for every member, and a Zigbee group
+  for a broadcast, so a group of five Zigbee bulbs is written about once a
+  second. The cost is precision: after a release, a budgeted light can finish
+  the transition it was last given.
+- **Repeated hold events** from a remote that re-sends "hold" while the button
+  is down do not re-send a native command that is already running.
+- A target naming both a group and its members drives each bulb once.
+
+The budgets are conservative defaults chosen from published limits, not
+measurements from this project. A hold ends at the rail on every path, so a
+lost release is bounded: native ramps stop when the device reaches its limit,
+and a simulated ramp stops writing when it gets there.
+
+Still open: area targets send one native command per light rather than one
+group command, native stops are not retried, and nothing here has been
+soak-tested on a large mesh.
 
 ## Dimming curve
 
@@ -177,11 +237,13 @@ Because the WiZ path bypasses `light.turn_on`, Home Assistant's state machine go
 
 **Color** is the exception, and only on `fade`. ZHA subscribes to `color_temperature` on a thirty-second minimum interval rather than the one-second interval it gives brightness, and plenty of bulbs never bind the report at all — so after a fade asserts a white, the fixture is right while `color_temp_kelvin` can read the old value for tens of seconds, occasionally until something forces a read. Call `homeassistant.update_entity` after the fade if an automation needs the attribute promptly.
 
-Selection is automatic. `move`, `step` and `fade` also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light.
+Selection is automatic. `move`, `step` and `fade` also accept an optional `backend` field (`auto`, `native`, `simulated`): `simulated` forces the stepped path on a natively-supported light, which is useful for comparing behavior, and `native` fails loudly if no native backend supports the light, or if the one that does has no native form of that particular verb.
 
 ## Status
 
-Version 0.7.0 adds ZHA, Z-Wave JS, Shelly Gen2+, Hue v2, deCONZ and LIFX, plus standard HA targets for multiple lights and areas. Shelly, Hue, deCONZ and LIFX have automated protocol/routing tests but have **not been validated on physical devices in this project**. See [TESTING.md](TESTING.md) for recorded hardware evidence and the remaining checks. Their existing HA integrations supply state updates; update timing has not been measured here. Use `backend: simulated` to compare or bypass an adapter.
+Version 0.8.0 adds no backends. It bounds what the simulated path can put on a mesh or bridge, fixes several ways a multi-light call could misbehave, and moves the evidence and traffic tables to the top of this page. See [RELEASE_NOTES_0.8.0.md](RELEASE_NOTES_0.8.0.md).
+
+Z-Wave JS, Shelly, Hue, deCONZ and LIFX have automated protocol and routing tests but have **not been validated on physical devices in this project**. See [TESTING.md](TESTING.md) for recorded hardware evidence and the remaining checks. Use `backend: simulated` to compare or bypass an adapter.
 
 Part of a broader effort to bring native move/stop dimming to the Home Assistant
 ecosystem. Requires Home Assistant 2026.2 or newer.

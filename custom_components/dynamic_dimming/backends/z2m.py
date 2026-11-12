@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 
 from homeassistant.components import mqtt
 from homeassistant.config_entries import ConfigEntry
@@ -18,6 +19,10 @@ from .simulation import resolve_rate
 # registry; the IEEE address doubles as the device's MQTT topic, which
 # survives friendly-name renames.
 _IDENTIFIER_PREFIX = "zigbee2mqtt_"
+# Zigbee2MQTT groups are devices in the registry too, under the same prefix,
+# but what follows it is not an address. Publishing to it would reach nothing,
+# so only a real IEEE address is claimed and a group degrades to simulation.
+_IEEE = re.compile(r"0x[0-9a-fA-F]{16}")
 
 
 class Z2MBackend(DimmingBackend):
@@ -49,7 +54,8 @@ class Z2MBackend(DimmingBackend):
             return None
         for domain, value in device.identifiers:
             if domain == "mqtt" and value.startswith(_IDENTIFIER_PREFIX):
-                return value.removeprefix(_IDENTIFIER_PREFIX)
+                ieee = value.removeprefix(_IDENTIFIER_PREFIX)
+                return ieee if _IEEE.fullmatch(ieee) else None
         return None
 
     def claims(self, entity_id: str) -> bool:

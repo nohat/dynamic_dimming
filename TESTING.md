@@ -1,4 +1,6 @@
-# Manual test plan — v0.1a
+# Manual test plan
+
+> **Status at v0.8.0.** This began as the v0.1a plan and has grown by addendum. Recorded hardware results exist for one Matter bulb and one ZHA bulb. Everything else below is a procedure that has not yet been run and written up, including the WiZ addendum, the system tests (S7, the traffic measurement, among them), and every Z-Wave JS, Shelly, Hue, deCONZ and LIFX check. The latest release verification is at the end of this file.
 
 The integration has so far been exercised casually, on a handful of lights. This plan makes the author's own testing systematic before asking anyone else for theirs — and it doubles as a guide for anyone who wants to test thoroughly before filing a device report. The author's test fleet, across two Home Assistant instances, covers seven integration paths: ESPHome on real dimmer loads, Tasmota (plug and bulb), Zigbee2MQTT, Matter, WiZ local UDP, Tuya cloud, and a Home Assistant light group. Each device runs the same per-device protocol; a set of system-level tests runs once per instance. Every completed device protocol ends by filing a device report through the repo's own report form — the author's reports are disclosed as such and seed the public matrix, and filing them exercises the funnel itself.
 
@@ -173,7 +175,7 @@ Two carried-over cautions. Drive the services with `entity_id` as a plain
 Adaptive Lighting switch with anything, disable that switch outright for the
 duration: S4 records why claiming manual control is not enough.
 
-#### Unrelated defect surfaced by this run
+#### Unrelated defect surfaced by this run (fixed in 0.7.0)
 
 Driving the services through a generic client failed with `invalid_format - value should be a string for dictionary value @ data['entity_id']`. All four services declare `cv.entity_id`, which takes a single string, so any caller passing a list — an automation using `target:`, or most API wrappers — is rejected. Pre-existing, not Matter-specific, and already the subject of a workaround in the CA lighting generator (`build-mv-lighting.py`, "Learned the hard way, 2026-08-07"). Tracked separately.
 
@@ -537,3 +539,9 @@ Source checks used the installed HA 2026.2.3 integration code for entity identit
 - https://lan.developer.lifx.com/docs/changing-a-device
 
 These checks establish interface expectations, not device performance.
+
+## 0.8.0 release verification — 2026-11-11
+
+The release passes 396 automated tests on HA 2026.2.3. The 32 new ones cover the simulated path's traffic guards: one write in flight against a slow light, latest-level-wins, no repeated levels, per-transport budgets shared across concurrent ramps, group fan-out costs, a budgeted fade still landing on its target, repeated hold events, concurrent stop with one failing light, a group targeted together with its members, the Zigbee2MQTT group identifier, and rejection of non-finite and out-of-range inputs.
+
+No hardware tests were performed for this release. The budgets (5 writes a second on Zigbee, Thread and Hue; 1 on Z-Wave) are defaults chosen from published limits and have not been measured on a mesh. S7 remains the measurement that would confirm them. Whether a budgeted write's `transition` reads as a continuous ramp on real bulbs is likewise unobserved.

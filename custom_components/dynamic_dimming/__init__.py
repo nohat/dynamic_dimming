@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import math
 
 import voluptuous as vol
 
@@ -28,12 +29,14 @@ from .const import (
     DIRECTION_DOWN,
     DIRECTION_UP,
     DOMAIN,
+    RATE_PROFILES,
     SERVICE_MOVE,
     SERVICE_FADE,
     SERVICE_STEP,
     SERVICE_STOP,
 )
 from .controller import DimmingController
+from .curve import CURVE_LINEAR, CURVE_PERCEPTUAL
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -41,35 +44,71 @@ _DIRECTION = vol.In([DIRECTION_UP, DIRECTION_DOWN])
 
 _BACKEND = vol.In([BACKEND_AUTO, BACKEND_SIMULATED, BACKEND_NATIVE])
 
+
+def _finite(value: float) -> float:
+    """Reject NaN and infinity, which pass a plain range check or overflow later."""
+    if not math.isfinite(value):
+        raise vol.Invalid("must be a finite number")
+    return value
+
+
+def _number(minimum: float, maximum: float) -> vol.All:
+    return vol.All(vol.Coerce(float), _finite, vol.Range(min=minimum, max=maximum))
+
+
+def _named_or_number(names, minimum: float, maximum: float):
+    """A known name, or a number in range (a numeric string counts as one).
+
+    ``vol.Any(number, cv.string)`` would not do: a value the number branch
+    rejects, such as infinity or zero, would be accepted by the string branch.
+    """
+    number = _number(minimum, maximum)
+
+    def _validate(value):
+        if isinstance(value, str) and value in names:
+            return value
+        if isinstance(value, bool):
+            raise vol.Invalid("expected a name or a number")
+        return number(value)
+
+    return _validate
+
+
+# A numeric rate is brightness units per second on the 0-255 scale: 1 is a
+# ramp of over four minutes and 2550 crosses the whole range in a tenth of a
+# second, so nothing useful lies outside these bounds.
+_RATE = _named_or_number(RATE_PROFILES, 1, 2550)
+_CURVE = _named_or_number((CURVE_LINEAR, CURVE_PERCEPTUAL), 1, 6)
+
 # Entity-service schemas: every service takes a standard HA target, so one call
 # may name one entity, several, or an area/device/label that resolves to several.
 _MOVE_SCHEMA = cv.make_entity_service_schema(
     {
         vol.Required(ATTR_DIRECTION): _DIRECTION,
-        vol.Optional(ATTR_RATE): vol.Any(vol.Coerce(float), cv.string),
+        vol.Optional(ATTR_RATE): _RATE,
         vol.Optional(ATTR_BACKEND, default=BACKEND_AUTO): _BACKEND,
-        vol.Optional(ATTR_CURVE): vol.Any(vol.Coerce(float), cv.string),
+        vol.Optional(ATTR_CURVE): _CURVE,
     }
 )
 _STOP_SCHEMA = cv.make_entity_service_schema({})
 _FADE_SCHEMA = cv.make_entity_service_schema(
     {
-        vol.Required("brightness_pct"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
-        vol.Required("duration"): vol.All(vol.Coerce(float), vol.Range(min=0.1, max=120)),
+        vol.Required("brightness_pct"): _number(0, 100),
+        vol.Required("duration"): _number(0.1, 120),
         vol.Optional("color_temp_kelvin"): vol.All(
             vol.Coerce(int), vol.Range(min=1000, max=10000)
         ),
         vol.Optional("backend", default="auto"): vol.In(["auto", "native", "simulated"]),
-        vol.Optional("curve"): cv.string,
+        vol.Optional("curve"): _CURVE,
     }
 )
 
 _STEP_SCHEMA = cv.make_entity_service_schema(
     {
         vol.Required(ATTR_DIRECTION): _DIRECTION,
-        vol.Optional(ATTR_STEP_PCT, default=DEFAULT_STEP_PCT): vol.Coerce(float),
+        vol.Optional(ATTR_STEP_PCT, default=DEFAULT_STEP_PCT): _number(0.1, 100),
         vol.Optional(ATTR_BACKEND, default=BACKEND_AUTO): _BACKEND,
-        vol.Optional(ATTR_CURVE): vol.Any(vol.Coerce(float), cv.string),
+        vol.Optional(ATTR_CURVE): _CURVE,
     }
 )
 
@@ -93,12 +132,38 @@ def _targets(hass: HomeAssistant, call: ServiceCall) -> list[str]:
         for entity_id in cv.ensure_list(call.data.get(ATTR_ENTITY_ID, []))
         if entity_id in selected.referenced
     ]
-    entity_ids = named + sorted(selected.indirectly_referenced - selected.referenced)
+    entity_ids = _without_overlap(
+        hass,
+        named + sorted(selected.indirectly_referenced - selected.referenced),
+    )
     if not entity_ids:
         # Reachable through an empty area or `entity_id: all`, which resolves to
         # nothing here because this integration owns no entities of its own.
         _LOGGER.debug("%s call resolved to no entities: %s", call.service, call.data)
     return entity_ids
+
+
+def _without_overlap(hass: HomeAssistant, entity_ids: list[str]) -> list[str]:
+    """Drop targets that would drive the same light twice.
+
+    An area often holds both a light group and the bulbs in it. Driving both
+    sends every bulb two ramps that fight each other. Where every member of a
+    group is targeted in its own right the group is dropped, so each bulb
+    keeps its own (possibly native) path; otherwise the group stays and the
+    members it already covers are dropped.
+    """
+    targeted = set(entity_ids)
+    dropped: set[str] = set()
+    for entity_id in entity_ids:
+        state = hass.states.get(entity_id)
+        members = state.attributes.get("entity_id") if state is not None else None
+        if not isinstance(members, (list, tuple)) or not members:
+            continue
+        if all(member in targeted for member in members):
+            dropped.add(entity_id)
+        else:
+            dropped.update(member for member in members if member in targeted)
+    return [entity_id for entity_id in entity_ids if entity_id not in dropped]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

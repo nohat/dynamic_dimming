@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
+from homeassistant.components.light import LightEntityFeature
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import CALLBACK_TYPE, HomeAssistant
 from homeassistant.helpers.event import async_track_time_interval
@@ -17,6 +18,7 @@ from ..const import (
     TICK_INTERVAL,
 )
 from ..curve import Fade, Ramp, curve_shape, from_position, to_position
+from ..traffic import TrafficBudget, write_costs
 from .base import DimmingBackend
 
 _LOGGER = logging.getLogger(__name__)
@@ -33,8 +35,8 @@ def resolve_rate(rate: str | float | None) -> float:
 
     Numeric rates are clamped to a positive floor so a non-positive rate
     (e.g. ``0`` from the free-text service field) can't zero out the
-    per-tick step and flood the mesh with an endless stream of identical
-    ``light.turn_on`` calls at the 20 Hz tick rate.
+    per-tick step and leave a ramp that never reaches a rail and so never
+    ends.
     """
     if rate is None:
         return RATE_PROFILES[DEFAULT_RATE]
@@ -56,6 +58,127 @@ def current_brightness(hass: HomeAssistant, entity_id: str) -> int | None:
     return int(value) if value is not None else _MIN
 
 
+class _Writer:
+    """Paces one ramp's absolute writes to one entity.
+
+    The ramp itself keeps advancing every tick, so its timing stays true; this
+    decides which of those levels actually become a ``light.turn_on``. Three
+    rules, each of which only ever removes writes:
+
+    - **One in flight.** A write is awaited, and no new one starts until it
+      returns. An integration that takes 300 ms to acknowledge a command gets
+      a write every 300 ms, not a queue of stale levels growing behind it.
+    - **Latest wins.** Levels that arrive while a write is in flight, or
+      inside a budget gap, replace each other; only the newest goes out.
+    - **Budgeted transports.** On a mesh or bridge the gap between writes is
+      set by ``traffic.TrafficBudget``, shared with every other ramp on that
+      transport. Where the light supports ``transition`` the gap is passed
+      along, so fewer writes still read as one continuous ramp.
+
+    A level identical to the last one sent is never repeated. The level a ramp
+    ends on is always delivered, however many were skipped on the way there.
+    """
+
+    def __init__(self, hass: HomeAssistant, entity_id: str, budget: TrafficBudget) -> None:
+        self.hass = hass
+        self.entity_id = entity_id
+        self._budget = budget
+        self._costs = write_costs(hass, entity_id)
+        budget.acquire(self._costs)
+        self._closed = False
+        self._in_flight = False
+        self._final = False
+        self._pending: int | None = None
+        self._extra: dict = {}
+        self._last_sent: int | None = None
+        self._ticks_since_send: int | None = None  # None: nothing sent yet
+        self._reported_failure = False
+
+    def offer(self, brightness: int, extra: dict | None = None, final: bool = False) -> None:
+        """Hand over this tick's level. Call exactly once per tick."""
+        if self._ticks_since_send is not None:
+            self._ticks_since_send += 1
+        if extra:
+            # Sticky until a write carries it: a color that rode on a level
+            # which was then superseded must not be lost with it.
+            self._extra.update(extra)
+        self._final = self._final or final
+        if brightness == self._last_sent and not self._extra:
+            self._pending = None
+        else:
+            self._pending = brightness
+        self._maybe_send()
+
+    def _gap_ticks(self) -> tuple[int, float]:
+        interval = self._budget.interval(self._costs)
+        return int(round(interval / _TICK_SECONDS)), interval
+
+    def _maybe_send(self) -> None:
+        if self._in_flight or self._pending is None:
+            return
+        gap_ticks, interval = self._gap_ticks()
+        if (
+            not self._final
+            and self._ticks_since_send is not None
+            and self._ticks_since_send < gap_ticks
+        ):
+            return
+        data: dict = {"entity_id": self.entity_id, "brightness": self._pending}
+        data.update(self._extra)
+        if gap_ticks > 1 and self._supports_transition():
+            data["transition"] = interval
+        self._last_sent = self._pending
+        self._pending = None
+        self._extra = {}
+        self._ticks_since_send = 0
+        self._in_flight = True
+        self.hass.async_create_task(
+            self._send(data), f"dynamic_dimming write {self.entity_id}"
+        )
+
+    def _supports_transition(self) -> bool:
+        state = self.hass.states.get(self.entity_id)
+        if state is None:
+            return False
+        features = state.attributes.get("supported_features") or 0
+        return bool(features & LightEntityFeature.TRANSITION)
+
+    async def _send(self, data: dict) -> None:
+        try:
+            await self.hass.services.async_call(
+                "light", "turn_on", data, blocking=True
+            )
+        except Exception as err:  # noqa: BLE001
+            # Deliberately broad: whatever the light's own integration raises
+            # for a write it could not deliver is worth one log line, never a
+            # dead ramp. Cancellation is not an Exception and still propagates.
+            if self._reported_failure:
+                _LOGGER.debug("write to %s failed: %s", self.entity_id, err)
+            else:
+                self._reported_failure = True
+                _LOGGER.warning("write to %s failed: %s", self.entity_id, err)
+        finally:
+            self._in_flight = False
+            # Ticks drive every write but the last: once the ramp has ended
+            # there are none left, so the level it ended on goes out from here.
+            if self._final:
+                self._maybe_send()
+
+    def close(self) -> None:
+        """End of the ramp: give the budget back.
+
+        A ramp that finished keeps its last level queued for delivery. One
+        that was cut short (a stop, a superseding move) drops whatever had not
+        gone out yet, because stopping means staying where the light is.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        self._budget.release(self._costs)
+        if not self._final:
+            self._pending = None
+
+
 class SimulationBackend(DimmingBackend):
     """Steps brightness toward a rail at a fixed tick, size scaled by rate.
 
@@ -73,8 +196,9 @@ class SimulationBackend(DimmingBackend):
        commanded level; rounded only when writing ``light.turn_on``).
     3. Cancel any prior job for this entity, then register a time-interval
        ``_tick`` and return the wrapped unsub to the controller.
-    4. Each tick: if the entity is gone, stop; else advance ``target``, write
-       rounded brightness, stop when a rail (0 / 255) is hit.
+    4. Each tick: if the entity is gone, stop; else advance ``target``, hand
+       the rounded brightness to the job's ``_Writer`` (which decides whether
+       it goes out now, later, or is superseded), stop when a rail is hit.
     ``async_step`` is one-shot (no interval). ``async_stop`` is a no-op here
     because the controller already cancels via the shared unsub.
 
@@ -92,6 +216,9 @@ class SimulationBackend(DimmingBackend):
         self._entry = entry
         # entity_id -> idempotent unsub for its active interval.
         self._unsubs: dict[str, CALLBACK_TYPE] = {}
+        # Shared by every ramp this backend runs, so concurrent ramps on one
+        # transport divide its write budget instead of each spending it whole.
+        self._budget = TrafficBudget()
 
     def _shape(self, curve: str | float | None) -> tuple[float, float]:
         """The gamma and floor this move should travel between."""
@@ -118,7 +245,11 @@ class SimulationBackend(DimmingBackend):
 
         ``color_temp_kelvin`` goes out with the first write only: this is an
         acknowledged transport, so once asserted the color sticks, and
-        repeating it 20 times a second would just tax the device for nothing.
+        repeating it on every write would just tax the device for nothing.
+
+        Writes are paced by ``_Writer``: never more than one in flight, never
+        a repeated level, and on a mesh or bridge no faster than the
+        transport's budget. The target itself is always delivered.
         """
         gamma, min_brightness = self._shape(curve)
         start = current_brightness(self.hass, entity_id)
@@ -134,20 +265,20 @@ class SimulationBackend(DimmingBackend):
 
         async def _tick(_now: datetime) -> None:
             nonlocal pending_temp
+            if current_brightness(self.hass, entity_id) is None:  # unavailable
+                self._stop_job(entity_id)
+                return
             target = fade.advance()
-            data: dict = {"entity_id": entity_id, "brightness": int(round(target))}
+            extra = None
             if pending_temp is not None:
-                data["color_temp_kelvin"] = int(pending_temp)
+                extra = {"color_temp_kelvin": int(pending_temp)}
                 pending_temp = None
-            await self.hass.services.async_call(
-                "light", "turn_on",
-                data,
-                blocking=False,
-            )
+            writer.offer(int(round(target)), extra, final=fade.done)
             if fade.done:
                 self._stop_job(entity_id)
 
         self._stop_job(entity_id)
+        writer = _Writer(self.hass, entity_id, self._budget)
         real_unsub = async_track_time_interval(self.hass, _tick, TICK_INTERVAL)
 
         def _unsub() -> None:
@@ -155,6 +286,7 @@ class SimulationBackend(DimmingBackend):
             if real_unsub is not None:
                 real_unsub()
                 real_unsub = None
+            writer.close()
             if self._unsubs.get(entity_id) is _unsub:
                 self._unsubs.pop(entity_id, None)
 
@@ -184,11 +316,7 @@ class SimulationBackend(DimmingBackend):
                 self._stop_job(entity_id)
                 return
             target = ramp.advance()
-            await self.hass.services.async_call(
-                "light", "turn_on",
-                {"entity_id": entity_id, "brightness": int(round(target))},
-                blocking=False,
-            )
+            writer.offer(int(round(target)), final=ramp.at_rail)
             if ramp.at_rail:  # bottomed out (min-on) or topped out (full)
                 self._stop_job(entity_id)
 
@@ -196,6 +324,7 @@ class SimulationBackend(DimmingBackend):
         # one wrapped in an idempotent unsub so controller-cancel and self-stop
         # can both call it safely.
         self._stop_job(entity_id)
+        writer = _Writer(self.hass, entity_id, self._budget)
         real_unsub = async_track_time_interval(self.hass, _tick, TICK_INTERVAL)
 
         def _unsub() -> None:
@@ -203,6 +332,7 @@ class SimulationBackend(DimmingBackend):
             if real_unsub is not None:
                 real_unsub()
                 real_unsub = None
+            writer.close()
             if self._unsubs.get(entity_id) is _unsub:
                 self._unsubs.pop(entity_id, None)
 
