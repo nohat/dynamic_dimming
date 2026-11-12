@@ -406,8 +406,12 @@ async def test_repeated_hold_events_send_one_native_move(hass):
     await hass.async_block_till_done()
     assert len(commands) == 1
 
+    # Settle after each: these commands are fire-and-forget service calls, so
+    # their order on the wire is only fixed once each has been delivered.
     await controller.async_move(light, "down", "medium")  # a reversal is new
+    await hass.async_block_till_done()
     await controller.async_stop(light)
+    await hass.async_block_till_done()
     await controller.async_move(light, "down", "medium")  # so is a fresh press
     await hass.async_block_till_done()
     assert [c["command"] for c in commands] == [1, 1, 3, 1]
